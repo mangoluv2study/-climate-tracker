@@ -1,8 +1,8 @@
 name: Climate Litigation Crawler
 on:
   schedule:
-    - cron: '0 0 * * *'  # 每天 UTC 00:00 = 台北 08:00
-  workflow_dispatch:     # 也可手動觸發
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   crawl:
