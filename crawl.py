@@ -1,4 +1,5 @@
 import os
+import json
 import feedparser
 import requests
 import anthropic
@@ -36,18 +37,30 @@ def fetch_article_text(url):
         print(f"  fetch failed: {e}")
         return ""
 
-def summarize(title, body):
+def analyze(title, body):
     content = body if len(body) > 200 else ""
-    if content:
-        prompt = f"請用繁體中文寫三句話摘要以下氣候訴訟新聞，直接給出摘要，不要說「根據標題」或「若需全文」之類的話：\n\n標題：{title}\n\n內文：{content}"
-    else:
-        prompt = f"請用繁體中文寫三句話摘要以下氣候訴訟新聞標題，直接給出摘要，不要加任何說明或備註：\n\n{title}"
+    prompt = f"""請分析以下氣候訴訟新聞，回傳 JSON 格式，不要加任何說明或 markdown：
+
+標題：{title}
+內文：{content[:2000] if content else '（無內文）'}
+
+請回傳以下 JSON（所有欄位用繁體中文）：
+{{
+  "summary": "三句話摘要，直接描述案件內容",
+  "defendant_type": "只能是以下其中一個：政府被告、企業被告、金融機構、不明",
+  "legal_cause": "只能是以下其中一個：侵權行為、違憲／人權、行政不作為、刑事訴追、資訊揭露、不明",
+  "court_stage": "只能是以下其中一個：國際法院、最高法院、上訴審、一審、不明",
+  "topic_tags": ["從以下選1-3個最相關的：石化燃料、排放責任、淨零路徑、漂綠、資訊揭露、巴黎協定、ESG永續、洪災海升、野火、原住民族、青年訴訟、氣候調適"]
+}}"""
+
     msg = claude.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=300,
+        max_tokens=400,
         messages=[{"role": "user", "content": prompt}]
     )
-    return msg.content[0].text.strip()
+    raw = msg.content[0].text.strip()
+    raw = raw.replace("```json","").replace("```","").strip()
+    return json.loads(raw)
 
 def crawl_news():
     for feed_url in NEWS_FEEDS:
@@ -56,17 +69,21 @@ def crawl_news():
             try:
                 print(f"  fetching: {entry.title[:50]}")
                 body = fetch_article_text(entry.link)
-                summary = summarize(entry.title, body)
+                result = analyze(entry.title, body)
                 row = {
                     "headline": entry.title,
                     "source": feed.feed.get("title", "Google News").replace(" - Google News",""),
                     "published_date": str(date.today()),
                     "url": entry.link,
-                    "content_summary": summary,
-                    "tags": ["climate", "litigation", "news"]
+                    "content_summary": result.get("summary",""),
+                    "defendant_type": result.get("defendant_type","不明"),
+                    "legal_cause": result.get("legal_cause","不明"),
+                    "court_stage": result.get("court_stage","不明"),
+                    "topic_tags": result.get("topic_tags",[]),
+                    "tags": ["climate","litigation","news"]
                 }
                 sb.table("news").upsert(row, on_conflict="url").execute()
-                print(f"  OK: {entry.title[:60]}")
+                print(f"  OK: {entry.title[:50]} | {row['defendant_type']} | {row['legal_cause']} | {row['court_stage']}")
             except Exception as e:
                 print(f"  ERR: {e}")
 
@@ -76,23 +93,27 @@ def crawl_cases():
         for entry in feed.entries[:10]:
             try:
                 print(f"  fetching case: {entry.title[:50]}")
-                content = entry.get("summary", "") or ""
+                content = entry.get("summary","") or ""
                 if not content and entry.get("content"):
-                    content = entry["content"][0].get("value", "")
+                    content = entry["content"][0].get("value","")
                 body = BeautifulSoup(content, "html.parser").get_text()
                 if len(body) < 200:
                     body = fetch_article_text(entry.link)
-                summary = summarize(entry.title, body)
+                result = analyze(entry.title, body)
                 row = {
                     "title": entry.title,
-                    "court": "",
+                    "court": result.get("court_stage",""),
                     "country": "",
-                    "summary": summary,
+                    "summary": result.get("summary",""),
                     "source_url": entry.link,
-                    "tags": ["climate", "litigation", "case"]
+                    "defendant_type": result.get("defendant_type","不明"),
+                    "legal_cause": result.get("legal_cause","不明"),
+                    "court_stage": result.get("court_stage","不明"),
+                    "topic_tags": result.get("topic_tags",[]),
+                    "tags": ["climate","litigation","case"]
                 }
                 sb.table("cases").upsert(row, on_conflict="source_url").execute()
-                print(f"  OK case: {entry.title[:60]}")
+                print(f"  OK case: {entry.title[:50]} | {row['defendant_type']} | {row['legal_cause']}")
             except Exception as e:
                 print(f"  ERR case: {e}")
 
