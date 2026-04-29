@@ -7,9 +7,8 @@ sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 claude = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
 RSS_FEEDS = [
-    "https://climatecasechart.com/feed/",
     "https://news.google.com/rss/search?q=climate+litigation+lawsuit&hl=en",
-    "https://www.unep.org/news-and-stories/rss.xml",
+    "https://news.google.com/rss/search?q=climate+change+court+ruling&hl=en",
 ]
 
 def summarize(text):
@@ -21,7 +20,7 @@ def summarize(text):
     )
     return msg.content[0].text
 
-def crawl_rss():
+def crawl_news():
     for url in RSS_FEEDS:
         feed = feedparser.parse(url)
         for entry in feed.entries[:10]:
@@ -40,7 +39,6 @@ def crawl_rss():
             except Exception as e:
                 print(f"✗ {e}")
 
-if __name__ == "__main__":
-    print("Starting crawl...")
-    crawl_rss()
-    print("Done.")
+def crawl_cases():
+    try:
+        url = "https://climatecasechart.com/wp-
