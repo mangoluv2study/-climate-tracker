@@ -41,4 +41,11 @@ def crawl_news():
 
 def crawl_cases():
     try:
-        url = "https://climatecasechart.com/wp-
+        api = "https://climatecasechart.com/wp-json/wp/v2/posts"
+        resp = requests.get(api, params={"per_page": 20}, timeout=15)
+        posts = resp.json()
+        for post in posts:
+            try:
+                title = post.get("title",{}).get("rendered","")
+                html = post.get("content",{}).get("rendered","")
+                text = BeautifulSoup(html, "html.parse
