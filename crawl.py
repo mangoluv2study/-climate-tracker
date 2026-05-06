@@ -72,6 +72,7 @@ def analyze(title, body):
 
 請回傳以下 JSON（所有欄位用繁體中文）：
 {{
+  "title_zh": "將標題翻譯成繁體中文，若已是繁體中文則直接複製，保留專有名詞",
   "summary": "三句話摘要，直接描述案件內容",
   "defendant_type": "只能是以下其中一個：政府被告、企業被告、金融機構、不明",
   "legal_cause": "只能是以下其中一個：侵權行為、違憲／人權、行政不作為、刑事訴追、資訊揭露、不明",
@@ -80,11 +81,27 @@ def analyze(title, body):
 }}"""
     msg = claude.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=400,
+        max_tokens=500,
         messages=[{"role": "user", "content": prompt}]
     )
     raw = msg.content[0].text.strip().replace("```json","").replace("```","").strip()
     return json.loads(raw)
+
+def is_relevant(title, summary):
+    prompt = f"""判斷以下新聞是否與「氣候變遷訴訟」直接相關。
+氣候變遷訴訟的定義：涉及氣候變遷、碳排放、溫室氣體的法律訴訟、判決、起訴、法院裁定。
+
+標題：{title}
+摘要：{summary}
+
+只回答 yes 或 no，不要加任何說明。"""
+    msg = claude.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=5,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    answer = msg.content[0].text.strip().lower()
+    return answer.startswith("y")
 
 def upsert_case(row):
     existing = sb.table("cases").select("id").eq("source_url", row["source_url"]).execute()
@@ -113,8 +130,12 @@ def crawl_google_news_en():
                 print(f"  {entry.title[:55]}")
                 body = fetch_text(entry.link)
                 result = analyze(entry.title, body)
+                if not is_relevant(entry.title, result.get("summary","")):
+                    print(f"  SKIP (not relevant)")
+                    continue
                 row = {
-                    "headline": entry.title,
+                    "headline": result.get("title_zh", entry.title),
+                    "original_headline": entry.title,
                     "source": "Google News",
                     "published_date": str(date.today()),
                     "url": entry.link,
@@ -141,8 +162,12 @@ def crawl_google_news_zh():
                 print(f"  {entry.title[:55]}")
                 body = fetch_text(entry.link)
                 result = analyze(entry.title, body)
+                if not is_relevant(entry.title, result.get("summary","")):
+                    print(f"  SKIP (not relevant)")
+                    continue
                 row = {
-                    "headline": entry.title,
+                    "headline": result.get("title_zh", entry.title),
+                    "original_headline": entry.title,
                     "source": "Google News 亞洲",
                     "published_date": str(date.today()),
                     "url": entry.link,
@@ -175,7 +200,8 @@ def crawl_sabin():
                     body = fetch_text(entry.link)
                 result = analyze(entry.title, body)
                 row = {
-                    "title": entry.title,
+                    "title": result.get("title_zh", entry.title),
+                    "original_title": entry.title,
                     "court": result.get("court_stage",""),
                     "country": "",
                     "summary": result.get("summary",""),
@@ -211,7 +237,8 @@ def crawl_alt_cases():
                         body = fetch_text(entry.link)
                     result = analyze(entry.title, body)
                     row = {
-                        "title": entry.title,
+                        "title": result.get("title_zh", entry.title),
+                        "original_title": entry.title,
                         "court": result.get("court_stage",""),
                         "country": "",
                         "summary": result.get("summary",""),
