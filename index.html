@@ -604,7 +604,7 @@ function showDetail(type,id){
   const d2cls=causeCls(item.legal_cause);
   const stage=item.court_stage;
   const topics=item.topic_tags||[];
-  const country=guessCountry(text);
+  const country=item.country||guessCountry(text);
   const title=item.headline||item.title||'';
   const summary=item.content_summary||item.summary||'';
   const url=item.url||item.source_url||'';
