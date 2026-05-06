@@ -753,7 +753,7 @@ async function saveEdit(){
     if(resp.ok){
       Object.assign(item, updates);
       closeEditModal();
-      showDetail(type, id);
+      showDetail(window.currentDetailType, window.currentDetailId);
     } else {
       alert('儲存失敗，請再試一次');
     }
