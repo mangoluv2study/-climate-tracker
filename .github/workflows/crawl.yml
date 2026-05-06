@@ -18,6 +18,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          JUDICIAL_ACCOUNT: ${{ secrets.JUDICIAL_ACCOUNT }}
+          JUDICIAL_PASSWORD: ${{ secrets.JUDICIAL_PASSWORD }}
       - name: Send email notification
         uses: dawidd6/action-send-mail@v3
         with:
@@ -28,11 +30,4 @@ jobs:
           subject: 氣候訴訟追蹤 - 今日更新完成
           to: ${{ secrets.GMAIL_USER }}
           from: 氣候訴訟追蹤系統
-          body: |
-            今日氣候訴訟資料已自動更新完成。
-
-            請前往 Dashboard 查看最新內容：
-            https://climate-tracker-q3mo-nnxf95tyd-tys-projects-f3fb6178.vercel.app
-
-            ---
-            此為自動通知信件
+          body: file://email_body.txt
