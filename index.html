@@ -116,7 +116,7 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
 .cloud-tag:hover{transform:translateY(-1px)}
 
 /* DETAIL VIEW */
-#detail-view{display:none;max-width:860px;margin:0 auto;padding:2rem}
+#detail-view{display:none}
 .back-btn{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:var(--text3);cursor:pointer;margin-bottom:2rem;width:fit-content;padding:6px 12px;border-radius:6px;transition:background 0.2s}
 .back-btn:hover{background:var(--bg3);color:var(--text)}
 .detail-type-badge{margin-bottom:1rem}
@@ -236,7 +236,7 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
   <div style="max-width:860px;margin:0 auto;padding:2rem">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem">
       <div class="back-btn" style="margin-bottom:0" onclick="showList()">← 返回列表</div>
-      <button class="edit-btn" id="global-edit-btn" onclick="openEditModal(currentDetailType,currentDetailId)" style="display:none">✎ 編輯此筆資訊</button>
+      <button class="edit-btn" id="global-edit-btn" onclick="openEditModal(window.currentDetailType,window.currentDetailId)" style="display:none">✎ 編輯此筆資訊</button>
     </div>
     <div id="detail-content"></div>
   </div>
@@ -622,8 +622,6 @@ function showDetail(type,id){
   if(stage&&stage!=='不明') badgeHtml+=`<span class="tag tag-stage" style="margin-right:6px">${stage}</span>`;
   topics.forEach(t=>{ badgeHtml+=`<span class="tag tag-topic" style="margin-right:6px"># ${t}</span>`; });
   window.currentDetailType=type; window.currentDetailId=id;
-  const btn=document.getElementById('global-edit-btn');
-  if(btn){ btn.style.display='block'; }
   document.getElementById('detail-content').innerHTML=`
     <div class="detail-type-badge">${badgeHtml}</div>
     <div class="detail-title">${esc(title)}</div>
@@ -669,6 +667,8 @@ function showDetail(type,id){
   `;
   document.getElementById('list-view').style.display='none';
   document.getElementById('detail-view').style.display='block';
+  const editBtn=document.getElementById('global-edit-btn');
+  if(editBtn) editBtn.style.display='block';
   window.scrollTo(0,0);
 }
 
