@@ -461,6 +461,14 @@ function renderNews(items){
   const sf=statusFilter.news;
   const filtered=sf==='all'?items:items.filter(n=>(n.status||'unread')===sf);
   if(!filtered.length){el.innerHTML='<div class="empty">沒有符合條件的資料</div>';return}
+  // sort: invalid goes to bottom
+  filtered.sort((a,b)=>{
+    const aInvalid=(a.status||'unread')==='invalid';
+    const bInvalid=(b.status||'unread')==='invalid';
+    if(aInvalid&&!bInvalid) return 1;
+    if(!aInvalid&&bInvalid) return -1;
+    return 0;
+  });
   el.innerHTML=filtered.map((n,i)=>`
     <div class="card status-${n.status||'unread'}" style="animation-delay:${i*0.03}s">
       <div class="card-head" onclick="showDetail('news',${n.id})" style="cursor:pointer">
@@ -474,6 +482,7 @@ function renderNews(items){
           <button class="sbtn sbtn-star${(n.status||'unread')==='important'?' active':''}" onclick="setStatus('news',${n.id},'important',this)" title="重要">⭐</button>
           <button class="sbtn sbtn-done${(n.status||'unread')==='done'?' active':''}" onclick="setStatus('news',${n.id},'done',this)" title="已讀">✓</button>
           <button class="sbtn sbtn-invalid${(n.status||'unread')==='invalid'?' active':''}" onclick="setStatus('news',${n.id},'invalid',this)" title="無效">✗</button>
+          ${(n.status||'unread')==='invalid'?`<button class="sbtn" onclick="deleteItem('news',`+n.id+`,event)" style="color:#8b1a1a;border-color:rgba(139,26,26,0.5)" title="刪除">🗑</button>`:''}
         </div>
       </div>
     </div>`).join('');
@@ -484,6 +493,13 @@ function renderCases(items){
   const sf=statusFilter.cases;
   const filtered=sf==='all'?items:items.filter(c=>(c.status||'unread')===sf);
   if(!filtered.length){el.innerHTML='<div class="empty">沒有符合條件的資料</div>';return}
+  filtered.sort((a,b)=>{
+    const aInvalid=(a.status||'unread')==='invalid';
+    const bInvalid=(b.status||'unread')==='invalid';
+    if(aInvalid&&!bInvalid) return 1;
+    if(!aInvalid&&bInvalid) return -1;
+    return 0;
+  });
   el.innerHTML=filtered.map((c,i)=>`
     <div class="card status-${c.status||'unread'}" style="animation-delay:${i*0.03}s">
       <div class="card-head" onclick="showDetail('case',${c.id})" style="cursor:pointer">
@@ -497,6 +513,7 @@ function renderCases(items){
           <button class="sbtn sbtn-star${(c.status||'unread')==='important'?' active':''}" onclick="setStatus('cases',${c.id},'important',this)" title="重要">⭐</button>
           <button class="sbtn sbtn-done${(c.status||'unread')==='done'?' active':''}" onclick="setStatus('cases',${c.id},'done',this)" title="已讀">✓</button>
           <button class="sbtn sbtn-invalid${(c.status||'unread')==='invalid'?' active':''}" onclick="setStatus('cases',${c.id},'invalid',this)" title="無效">✗</button>
+          ${(c.status||'unread')==='invalid'?`<button class="sbtn" onclick="deleteItem('cases',`+c.id+`,event)" style="color:#8b1a1a;border-color:rgba(139,26,26,0.5)" title="刪除">🗑</button>`:''}
         </div>
       </div>
     </div>`).join('');
@@ -763,6 +780,28 @@ async function saveEdit(){
     }
   } catch(e){
     alert('儲存失敗：'+e.message);
+  }
+}
+
+async function deleteItem(table, id, event){
+  event.stopPropagation();
+  if(!confirm('確定要刪除這筆資料嗎？此操作無法復原。')) return;
+  try{
+    await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`,{
+      method:'DELETE',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    });
+    if(table==='news'){
+      allNews=allNews.filter(n=>n.id!==id);
+      renderNews(allNews);
+      document.getElementById('count-news').textContent=allNews.length;
+    } else {
+      allCases=allCases.filter(c=>c.id!==id);
+      renderCases(allCases);
+      document.getElementById('count-cases').textContent=allCases.length;
+    }
+  } catch(e){
+    alert('刪除失敗：'+e.message);
   }
 }
 
