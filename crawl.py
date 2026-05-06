@@ -18,18 +18,29 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
 }
 
-NEWS_FEEDS = [
+# Google News RSS - 英文
+NEWS_FEEDS_EN = [
     "https://news.google.com/rss/search?q=climate+litigation+lawsuit&hl=en",
     "https://news.google.com/rss/search?q=climate+change+court+ruling&hl=en",
 ]
 
+# Google News RSS - 中文（抓中國/亞洲相關）
+NEWS_FEEDS_ZH = [
+    "https://news.google.com/rss/search?q=%E6%B0%A3%E5%80%99%E8%A8%B4%E8%A8%9F&hl=zh-TW&gl=TW",
+    "https://news.google.com/rss/search?q=%E7%A2%B3%E6%8E%92%E6%94%BE+%E6%B3%95%E9%99%A2&hl=zh-TW&gl=TW",
+    "https://news.google.com/rss/search?q=%E6%B0%94%E5%80%99%E8%AF%89%E8%AE%BC+%E4%B8%AD%E5%9B%BD&hl=zh-CN&gl=CN",
+    "https://news.google.com/rss/search?q=%E7%A2%B3%E6%8E%92%E6%94%BE+%E8%B5%94%E5%81%BF+%E6%B3%95%E9%99%A2&hl=zh-CN&gl=CN",
+]
+
+# Sabin Center cases
 CASES_FEEDS = [
     "https://climate.law.columbia.edu/rss.xml",
 ]
 
-CHINA_FEEDS = [
-    "http://www.court.gov.cn/rss.xml",
-    "https://www.mee.gov.cn/ywgz/zysthjbhzf/rss.xml",
+# 替代 ECOLEX - 可以從 GitHub Actions 存取的來源
+ALT_CASE_FEEDS = [
+    "https://www.climatechangenews.com/feed/",
+    "https://climatecasechart.com/feed/",
 ]
 
 TAIWAN_KEYWORDS = ["氣候變遷", "碳排放", "溫室氣體"]
@@ -91,11 +102,11 @@ def upsert_news(row):
         new_news.append(row)
     return is_new
 
-# ── SOURCE 1: Google News ────────────────────────────
+# ── SOURCE 1: Google News 英文 ────────────────────────
 
-def crawl_google_news():
-    print("\n=== Google News ===")
-    for feed_url in NEWS_FEEDS:
+def crawl_google_news_en():
+    print("\n=== Google News（英文）===")
+    for feed_url in NEWS_FEEDS_EN:
         feed = feedparser.parse(feed_url)
         for entry in feed.entries[:10]:
             try:
@@ -112,14 +123,42 @@ def crawl_google_news():
                     "legal_cause": result.get("legal_cause","不明"),
                     "court_stage": result.get("court_stage","不明"),
                     "topic_tags": result.get("topic_tags",[]),
-                    "tags": ["climate","litigation","news"]
+                    "tags": ["climate","litigation","news","en"]
                 }
                 status = "NEW" if upsert_news(row) else "UPD"
                 print(f"  {status}: {row['defendant_type']} | {row['legal_cause']}")
             except Exception as e:
                 print(f"  ERR: {e}")
 
-# ── SOURCE 2: Sabin Center ───────────────────────────
+# ── SOURCE 2: Google News 中文（亞洲）────────────────
+
+def crawl_google_news_zh():
+    print("\n=== Google News（中文/亞洲）===")
+    for feed_url in NEWS_FEEDS_ZH:
+        feed = feedparser.parse(feed_url)
+        for entry in feed.entries[:8]:
+            try:
+                print(f"  {entry.title[:55]}")
+                body = fetch_text(entry.link)
+                result = analyze(entry.title, body)
+                row = {
+                    "headline": entry.title,
+                    "source": "Google News 亞洲",
+                    "published_date": str(date.today()),
+                    "url": entry.link,
+                    "content_summary": result.get("summary",""),
+                    "defendant_type": result.get("defendant_type","不明"),
+                    "legal_cause": result.get("legal_cause","不明"),
+                    "court_stage": result.get("court_stage","不明"),
+                    "topic_tags": result.get("topic_tags",[]),
+                    "tags": ["climate","litigation","news","asia"]
+                }
+                status = "NEW" if upsert_news(row) else "UPD"
+                print(f"  {status}: {row['defendant_type']} | {row['legal_cause']}")
+            except Exception as e:
+                print(f"  ERR: {e}")
+
+# ── SOURCE 3: Sabin Center ───────────────────────────
 
 def crawl_sabin():
     print("\n=== Sabin Center ===")
@@ -153,7 +192,46 @@ def crawl_sabin():
             except Exception as e:
                 print(f"  ERR: {e}")
 
-# ── SOURCE 3: 台灣司法院 API ─────────────────────────
+# ── SOURCE 4: Climate Home News + Climate Case Chart ─
+
+def crawl_alt_cases():
+    print("\n=== Climate Home News / Climate Case Chart ===")
+    for feed_url in ALT_CASE_FEEDS:
+        try:
+            feed = feedparser.parse(feed_url)
+            if not feed.entries:
+                print(f"  無法讀取：{feed_url}")
+                continue
+            for entry in feed.entries[:8]:
+                try:
+                    print(f"  {entry.title[:55]}")
+                    content = entry.get("summary","") or ""
+                    body = BeautifulSoup(content, "html.parser").get_text()
+                    if len(body) < 200:
+                        body = fetch_text(entry.link)
+                    result = analyze(entry.title, body)
+                    row = {
+                        "title": entry.title,
+                        "court": result.get("court_stage",""),
+                        "country": "",
+                        "summary": result.get("summary",""),
+                        "source_url": entry.link,
+                        "full_text_url": entry.link,
+                        "defendant_type": result.get("defendant_type","不明"),
+                        "legal_cause": result.get("legal_cause","不明"),
+                        "court_stage": result.get("court_stage","不明"),
+                        "topic_tags": result.get("topic_tags",[]),
+                        "tags": ["climate","litigation","case","international"]
+                    }
+                    status = "NEW" if upsert_case(row) else "UPD"
+                    print(f"  {status}: {row['defendant_type']} | {row['legal_cause']}")
+                    time.sleep(1)
+                except Exception as e:
+                    print(f"  item ERR: {e}")
+        except Exception as e:
+            print(f"  feed ERR: {e}")
+
+# ── SOURCE 5: 台灣司法院 API ─────────────────────────
 
 def get_judicial_token():
     try:
@@ -165,12 +243,12 @@ def get_judicial_token():
         data = resp.json()
         token = data.get("token","")
         if token:
-            print(f"  司法院 Token 取得成功")
+            print(f"  Token 取得成功")
         else:
-            print(f"  司法院 Token 失敗：{data}")
+            print(f"  Token 失敗：{data}")
         return token
     except Exception as e:
-        print(f"  司法院登入失敗：{e}")
+        print(f"  登入失敗：{e}")
         return ""
 
 def crawl_taiwan_court():
@@ -178,13 +256,10 @@ def crawl_taiwan_court():
     if not JUDICIAL_ACCOUNT or not JUDICIAL_PASSWORD:
         print("  未設定帳號密碼，跳過")
         return
-
     token = get_judicial_token()
     if not token:
         return
-
     headers = {**HEADERS, "Authorization": f"Bearer {token}"}
-
     for kw in TAIWAN_KEYWORDS:
         try:
             resp = requests.get(
@@ -195,7 +270,6 @@ def crawl_taiwan_court():
             )
             data = resp.json()
             items = data if isinstance(data, list) else data.get("data", [])
-
             for item in items[:5]:
                 try:
                     jid = item.get("JID","")
@@ -203,10 +277,7 @@ def crawl_taiwan_court():
                     court = item.get("JCOURTNAME","")
                     full_url = f"https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id={jid}"
                     pdf_url = item.get("JFULLPDF","") or full_url
-
                     print(f"  {title[:55]}")
-
-                    # fetch full text via API
                     body = ""
                     try:
                         detail = requests.get(
@@ -218,7 +289,6 @@ def crawl_taiwan_court():
                         body = detail.get("JFULL","")[:3000]
                     except:
                         pass
-
                     result = analyze(title, body)
                     row = {
                         "title": title,
@@ -242,89 +312,6 @@ def crawl_taiwan_court():
         except Exception as e:
             print(f"  kw '{kw}' ERR: {e}")
 
-# ── SOURCE 4: 中國法院網 RSS ─────────────────────────
-
-def crawl_china_court():
-    print("\n=== 中國法院網 ===")
-    climate_kws = ["气候","碳排","温室","环境污染","生态"]
-    for feed_url in CHINA_FEEDS:
-        try:
-            feed = feedparser.parse(feed_url)
-            if not feed.entries:
-                print(f"  無法讀取：{feed_url}")
-                continue
-            for entry in feed.entries[:20]:
-                title = entry.get("title","")
-                if not any(kw in title for kw in climate_kws):
-                    continue
-                try:
-                    print(f"  {title[:55]}")
-                    body = fetch_text(entry.link)
-                    result = analyze(title, body)
-                    row = {
-                        "headline": title,
-                        "source": "中國法院網",
-                        "published_date": str(date.today()),
-                        "url": entry.link,
-                        "content_summary": result.get("summary",""),
-                        "defendant_type": result.get("defendant_type","不明"),
-                        "legal_cause": result.get("legal_cause","不明"),
-                        "court_stage": result.get("court_stage","不明"),
-                        "topic_tags": result.get("topic_tags",[]),
-                        "tags": ["climate","litigation","news","china"]
-                    }
-                    status = "NEW" if upsert_news(row) else "UPD"
-                    print(f"  {status}: {row['defendant_type']} | {row['legal_cause']}")
-                    time.sleep(1)
-                except Exception as e:
-                    print(f"  item ERR: {e}")
-        except Exception as e:
-            print(f"  feed ERR: {e}")
-
-# ── SOURCE 5: ECOLEX ─────────────────────────────────
-
-def crawl_ecolex():
-    print("\n=== ECOLEX ===")
-    try:
-        url = "https://www.ecolex.org/result/?type=CaseAnalysis&q=climate+change&xdate_min=2020-01-01"
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        items = soup.select("article.search-result")[:10]
-        for item in items:
-            try:
-                a_tag = item.select_one("h2 a")
-                if not a_tag:
-                    continue
-                title = a_tag.get_text(strip=True)
-                href = a_tag.get("href","")
-                full_url = "https://www.ecolex.org" + href if href.startswith("/") else href
-                excerpt = item.select_one(".search-result-excerpt")
-                body = excerpt.get_text(strip=True) if excerpt else ""
-                if len(body) < 100:
-                    body = fetch_text(full_url)
-                print(f"  {title[:55]}")
-                result = analyze(title, body)
-                row = {
-                    "title": title,
-                    "court": result.get("court_stage",""),
-                    "country": "",
-                    "summary": result.get("summary",""),
-                    "source_url": full_url,
-                    "full_text_url": full_url,
-                    "defendant_type": result.get("defendant_type","不明"),
-                    "legal_cause": result.get("legal_cause","不明"),
-                    "court_stage": result.get("court_stage","不明"),
-                    "topic_tags": result.get("topic_tags",[]),
-                    "tags": ["climate","litigation","case","ecolex"]
-                }
-                status = "NEW" if upsert_case(row) else "UPD"
-                print(f"  {status}: {row['defendant_type']} | {row['legal_cause']}")
-                time.sleep(1)
-            except Exception as e:
-                print(f"  item ERR: {e}")
-    except Exception as e:
-        print(f"  ECOLEX ERR: {e}")
-
 # ── EMAIL BODY ────────────────────────────────────────
 
 def write_email_body():
@@ -333,7 +320,6 @@ def write_email_body():
     lines.append(f"📅 {today} 氣候訴訟每日摘要")
     lines.append(f"新增新聞：{len(new_news)} 筆　新增案件：{len(new_cases)} 筆")
     lines.append("")
-
     if new_cases:
         lines.append("━━ 新增訴訟案件 ━━")
         for c in new_cases:
@@ -346,7 +332,6 @@ def write_email_body():
             lines.append(f"  摘要：{c['summary'][:100]}...")
             lines.append(f"  連結：{c['source_url']}")
             lines.append("")
-
     if new_news:
         lines.append("━━ 新增新聞報導 ━━")
         for n in new_news:
@@ -357,15 +342,12 @@ def write_email_body():
             lines.append(f"  摘要：{n['content_summary'][:100]}...")
             lines.append(f"  連結：{n['url']}")
             lines.append("")
-
     if not new_news and not new_cases:
         lines.append("今日無新增資料，所有來源均為最新狀態。")
         lines.append("")
-
     lines.append("━━━━━━━━━━━━━━━━━━━━")
     lines.append("前往 Dashboard 查看完整資料：")
     lines.append("https://climate-tracker-q3mo-nnxf95tyd-tys-projects-f3fb6178.vercel.app")
-
     body = "\n".join(lines)
     with open("email_body.txt", "w", encoding="utf-8") as f:
         f.write(body)
@@ -376,10 +358,10 @@ def write_email_body():
 
 if __name__ == "__main__":
     print("Starting crawl...")
-    crawl_google_news()
+    crawl_google_news_en()
+    crawl_google_news_zh()
     crawl_sabin()
+    crawl_alt_cases()
     crawl_taiwan_court()
-    crawl_china_court()
-    crawl_ecolex()
     write_email_body()
     print("\nAll done.")
