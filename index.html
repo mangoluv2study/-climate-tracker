@@ -172,8 +172,8 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
 <div id="list-view">
   <div style="max-width:1000px;margin:0 auto;padding:2rem">
     <div class="metrics">
-      <div class="metric"><div class="metric-label">訴訟案件</div><div class="metric-val" id="count-cases">—</div><div class="metric-sub">已收錄判決</div></div>
       <div class="metric"><div class="metric-label">最新新聞</div><div class="metric-val" id="count-news">—</div><div class="metric-sub">追蹤報導</div></div>
+      <div class="metric"><div class="metric-label">訴訟案件</div><div class="metric-val" id="count-cases">—</div><div class="metric-sub">已收錄判決</div></div>
       <div class="metric"><div class="metric-label">最後更新</div><div class="metric-val" id="last-update" style="font-size:18px;padding-top:6px">—</div><div class="metric-sub">每日 08:00 自動爬取</div></div>
     </div>
 
@@ -618,6 +618,7 @@ function showDetail(type,id){
   if(d2cls) badgeHtml+=`<span class="tag ${d2cls}" style="margin-right:6px">${item.legal_cause}</span>`;
   if(stage&&stage!=='不明') badgeHtml+=`<span class="tag tag-stage" style="margin-right:6px">${stage}</span>`;
   topics.forEach(t=>{ badgeHtml+=`<span class="tag tag-topic" style="margin-right:6px"># ${t}</span>`; });
+  const detailType=type; const detailId=id;
   document.getElementById('detail-content').innerHTML=`
     <div class="detail-type-badge">${badgeHtml}</div>
     <div class="detail-title">${esc(title)}</div>
@@ -628,7 +629,6 @@ function showDetail(type,id){
     </div>
     <div class="section">
       <div class="section-label" style="display:flex;align-items:center">案件摘要</div>
-      <button class="edit-btn" style="margin-bottom:1rem" onclick="openEditModal('${type}',${id})">✎ 編輯資訊</button>
       <div class="summary-grid">
         <div class="summary-item"><div class="summary-item-label">涉及國家／地區</div><div class="summary-item-val">${country||'不明'}</div></div>
         <div class="summary-item"><div class="summary-item-label">法律訴由</div><div class="summary-item-val">${item.legal_cause&&item.legal_cause!=='不明'?item.legal_cause:guessStage(summary)}</div></div>
@@ -665,6 +665,14 @@ function showDetail(type,id){
   document.getElementById('list-view').style.display='none';
   document.getElementById('detail-view').style.display='block';
   window.scrollTo(0,0);
+  // Add edit button after render
+  const editBtn = document.createElement('button');
+  editBtn.className = 'edit-btn';
+  editBtn.style.cssText = 'display:block;margin-bottom:1rem;margin-top:-0.5rem';
+  editBtn.innerHTML = '✎ 編輯此筆資訊';
+  editBtn.onclick = function(){ openEditModal(detailType, detailId); };
+  const sectionLabel = document.querySelector('#detail-content .section-label');
+  if(sectionLabel) sectionLabel.parentNode.insertBefore(editBtn, sectionLabel.nextSibling);
 }
 
 async function setStatus(table,id,newStatus,btn){
