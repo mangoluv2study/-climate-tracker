@@ -234,7 +234,10 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
 
 <div id="detail-view">
   <div style="max-width:860px;margin:0 auto;padding:2rem">
-    <div class="back-btn" onclick="showList()">← 返回列表</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem">
+      <div class="back-btn" style="margin-bottom:0" onclick="showList()">← 返回列表</div>
+      <button class="edit-btn" id="global-edit-btn" onclick="openEditModal(currentDetailType,currentDetailId)" style="display:none">✎ 編輯此筆資訊</button>
+    </div>
     <div id="detail-content"></div>
   </div>
 </div>
@@ -618,7 +621,9 @@ function showDetail(type,id){
   if(d2cls) badgeHtml+=`<span class="tag ${d2cls}" style="margin-right:6px">${item.legal_cause}</span>`;
   if(stage&&stage!=='不明') badgeHtml+=`<span class="tag tag-stage" style="margin-right:6px">${stage}</span>`;
   topics.forEach(t=>{ badgeHtml+=`<span class="tag tag-topic" style="margin-right:6px"># ${t}</span>`; });
-  const detailType=type; const detailId=id;
+  window.currentDetailType=type; window.currentDetailId=id;
+  const btn=document.getElementById('global-edit-btn');
+  if(btn){ btn.style.display='block'; }
   document.getElementById('detail-content').innerHTML=`
     <div class="detail-type-badge">${badgeHtml}</div>
     <div class="detail-title">${esc(title)}</div>
@@ -665,14 +670,6 @@ function showDetail(type,id){
   document.getElementById('list-view').style.display='none';
   document.getElementById('detail-view').style.display='block';
   window.scrollTo(0,0);
-  // Add edit button after render
-  const editBtn = document.createElement('button');
-  editBtn.className = 'edit-btn';
-  editBtn.style.cssText = 'display:block;margin-bottom:1rem;margin-top:-0.5rem';
-  editBtn.innerHTML = '✎ 編輯此筆資訊';
-  editBtn.onclick = function(){ openEditModal(detailType, detailId); };
-  const sectionLabel = document.querySelector('#detail-content .section-label');
-  if(sectionLabel) sectionLabel.parentNode.insertBefore(editBtn, sectionLabel.nextSibling);
 }
 
 async function setStatus(table,id,newStatus,btn){
@@ -704,6 +701,8 @@ function setStatusFilter(tab,val,btn){
 }
 
 function openEditModal(type, id){
+  if(!type) type=window.currentDetailType;
+  if(!id) id=window.currentDetailId;
   const item = type==='news' ? allNews.find(n=>n.id===id) : allCases.find(c=>c.id===id);
   if(!item) return;
   document.getElementById('edit-type').value = type;
@@ -766,6 +765,8 @@ async function saveEdit(){
 function showList(){
   document.getElementById('list-view').style.display='block';
   document.getElementById('detail-view').style.display='none';
+  const btn=document.getElementById('global-edit-btn');
+  if(btn) btn.style.display='none';
   window.scrollTo(0,0);
 }
 
