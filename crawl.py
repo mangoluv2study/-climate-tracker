@@ -11,6 +11,9 @@ from datetime import date
 sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 claude = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
+JUDICIAL_ACCOUNT = os.environ.get("JUDICIAL_ACCOUNT", "")
+JUDICIAL_PASSWORD = os.environ.get("JUDICIAL_PASSWORD", "")
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
 }
@@ -23,6 +26,13 @@ NEWS_FEEDS = [
 CASES_FEEDS = [
     "https://climate.law.columbia.edu/rss.xml",
 ]
+
+CHINA_FEEDS = [
+    "http://www.court.gov.cn/rss.xml",
+    "https://www.mee.gov.cn/ywgz/zysthjbhzf/rss.xml",
+]
+
+TAIWAN_KEYWORDS = ["氣候變遷", "碳排放", "溫室氣體"]
 
 new_news = []
 new_cases = []
@@ -81,7 +91,7 @@ def upsert_news(row):
         new_news.append(row)
     return is_new
 
-# ── SOURCE 1: Google News RSS ────────────────────────
+# ── SOURCE 1: Google News ────────────────────────────
 
 def crawl_google_news():
     print("\n=== Google News ===")
@@ -109,7 +119,7 @@ def crawl_google_news():
             except Exception as e:
                 print(f"  ERR: {e}")
 
-# ── SOURCE 2: Sabin Center RSS ───────────────────────
+# ── SOURCE 2: Sabin Center ───────────────────────────
 
 def crawl_sabin():
     print("\n=== Sabin Center ===")
@@ -143,57 +153,80 @@ def crawl_sabin():
             except Exception as e:
                 print(f"  ERR: {e}")
 
-# ── SOURCE 3: 台灣司法院裁判書 ──────────────────────
+# ── SOURCE 3: 台灣司法院 API ─────────────────────────
+
+def get_judicial_token():
+    try:
+        resp = requests.post(
+            "https://data.judicial.gov.tw/jdg/api/Auth",
+            json={"account": JUDICIAL_ACCOUNT, "password": JUDICIAL_PASSWORD},
+            timeout=10
+        )
+        data = resp.json()
+        token = data.get("token","")
+        if token:
+            print(f"  司法院 Token 取得成功")
+        else:
+            print(f"  司法院 Token 失敗：{data}")
+        return token
+    except Exception as e:
+        print(f"  司法院登入失敗：{e}")
+        return ""
 
 def crawl_taiwan_court():
     print("\n=== 台灣司法院 ===")
-    keywords = ["氣候變遷", "碳排放", "溫室氣體"]
-    base_url = "https://judgment.judicial.gov.tw/FJUD/qryresult.aspx"
+    if not JUDICIAL_ACCOUNT or not JUDICIAL_PASSWORD:
+        print("  未設定帳號密碼，跳過")
+        return
 
-    for kw in keywords:
+    token = get_judicial_token()
+    if not token:
+        return
+
+    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
+
+    for kw in TAIWAN_KEYWORDS:
         try:
-            params = {
-                "jud_year": "",
-                "jud_case": "",
-                "jud_no": "",
-                "jud_type": "最高法院,高等法院",
-                "searchWord": kw,
-                "judtype": "判決",
-                "pg": "1"
-            }
             resp = requests.get(
-                "https://judgment.judicial.gov.tw/FJUD/qryresult.aspx",
-                params=params,
-                headers=HEADERS,
+                "https://data.judicial.gov.tw/jdg/api/JList",
+                params={"kw": kw, "pg": 1},
+                headers=headers,
                 timeout=15
             )
-            soup = BeautifulSoup(resp.text, "html.parser")
-            rows = soup.select("table.table tr")[1:6]
+            data = resp.json()
+            items = data if isinstance(data, list) else data.get("data", [])
 
-            for tr in rows:
+            for item in items[:5]:
                 try:
-                    tds = tr.find_all("td")
-                    if len(tds) < 3:
-                        continue
-                    title_td = tds[1]
-                    a_tag = title_td.find("a")
-                    if not a_tag:
-                        continue
-                    title = a_tag.get_text(strip=True)
-                    href = a_tag.get("href","")
-                    full_url = "https://judgment.judicial.gov.tw/FJUD/" + href if href.startswith("FLAW") else href
-                    date_text = tds[2].get_text(strip=True) if len(tds) > 2 else ""
+                    jid = item.get("JID","")
+                    title = item.get("JTITLE","") or item.get("JFULLCASE","") or jid
+                    court = item.get("JCOURTNAME","")
+                    full_url = f"https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id={jid}"
+                    pdf_url = item.get("JFULLPDF","") or full_url
 
                     print(f"  {title[:55]}")
-                    body = fetch_text(full_url)
+
+                    # fetch full text via API
+                    body = ""
+                    try:
+                        detail = requests.get(
+                            "https://data.judicial.gov.tw/jdg/api/JDoc",
+                            params={"jid": jid},
+                            headers=headers,
+                            timeout=15
+                        ).json()
+                        body = detail.get("JFULL","")[:3000]
+                    except:
+                        pass
+
                     result = analyze(title, body)
                     row = {
                         "title": title,
-                        "court": result.get("court_stage",""),
+                        "court": court,
                         "country": "台灣",
                         "summary": result.get("summary",""),
                         "source_url": full_url,
-                        "full_text_url": full_url,
+                        "full_text_url": pdf_url,
                         "defendant_type": result.get("defendant_type","不明"),
                         "legal_cause": result.get("legal_cause","不明"),
                         "court_stage": result.get("court_stage","不明"),
@@ -201,59 +234,52 @@ def crawl_taiwan_court():
                         "tags": ["climate","litigation","case","taiwan"]
                     }
                     status = "NEW" if upsert_case(row) else "UPD"
-                    print(f"  {status}: {row['defendant_type']} | {row['legal_cause']}")
-                    time.sleep(1)
-                except Exception as e:
-                    print(f"  row ERR: {e}")
-            time.sleep(2)
-        except Exception as e:
-            print(f"  keyword '{kw}' ERR: {e}")
-
-# ── SOURCE 4: 中國裁判文書網 ────────────────────────
-
-def crawl_china_court():
-    print("\n=== 中國裁判文書網 ===")
-    keywords = ["气候变化", "碳排放", "温室气体"]
-    for kw in keywords:
-        try:
-            url = f"https://wenshu.court.gov.cn/website/wenshu/181107ANFZ0BXSK4/index.html?pageId=&s8=02&s1={requests.utils.quote(kw)}"
-            resp = requests.get(url, headers=HEADERS, timeout=15)
-            soup = BeautifulSoup(resp.text, "html.parser")
-            items = soup.select(".main_content li")[:5]
-
-            for item in items:
-                try:
-                    a_tag = item.find("a")
-                    if not a_tag:
-                        continue
-                    title = a_tag.get_text(strip=True)
-                    href = a_tag.get("href","")
-                    full_url = "https://wenshu.court.gov.cn" + href if href.startswith("/") else href
-
-                    print(f"  {title[:55]}")
-                    body = fetch_text(full_url)
-                    result = analyze(title, body)
-                    row = {
-                        "title": title,
-                        "court": result.get("court_stage",""),
-                        "country": "中國",
-                        "summary": result.get("summary",""),
-                        "source_url": full_url,
-                        "full_text_url": full_url,
-                        "defendant_type": result.get("defendant_type","不明"),
-                        "legal_cause": result.get("legal_cause","不明"),
-                        "court_stage": result.get("court_stage","不明"),
-                        "topic_tags": result.get("topic_tags",[]),
-                        "tags": ["climate","litigation","case","china"]
-                    }
-                    status = "NEW" if upsert_case(row) else "UPD"
-                    print(f"  {status}: {row['defendant_type']} | {row['legal_cause']}")
+                    print(f"  {status}: {court} | {row['legal_cause']}")
                     time.sleep(1)
                 except Exception as e:
                     print(f"  item ERR: {e}")
             time.sleep(2)
         except Exception as e:
-            print(f"  keyword '{kw}' ERR: {e}")
+            print(f"  kw '{kw}' ERR: {e}")
+
+# ── SOURCE 4: 中國法院網 RSS ─────────────────────────
+
+def crawl_china_court():
+    print("\n=== 中國法院網 ===")
+    climate_kws = ["气候","碳排","温室","环境污染","生态"]
+    for feed_url in CHINA_FEEDS:
+        try:
+            feed = feedparser.parse(feed_url)
+            if not feed.entries:
+                print(f"  無法讀取：{feed_url}")
+                continue
+            for entry in feed.entries[:20]:
+                title = entry.get("title","")
+                if not any(kw in title for kw in climate_kws):
+                    continue
+                try:
+                    print(f"  {title[:55]}")
+                    body = fetch_text(entry.link)
+                    result = analyze(title, body)
+                    row = {
+                        "headline": title,
+                        "source": "中國法院網",
+                        "published_date": str(date.today()),
+                        "url": entry.link,
+                        "content_summary": result.get("summary",""),
+                        "defendant_type": result.get("defendant_type","不明"),
+                        "legal_cause": result.get("legal_cause","不明"),
+                        "court_stage": result.get("court_stage","不明"),
+                        "topic_tags": result.get("topic_tags",[]),
+                        "tags": ["climate","litigation","news","china"]
+                    }
+                    status = "NEW" if upsert_news(row) else "UPD"
+                    print(f"  {status}: {row['defendant_type']} | {row['legal_cause']}")
+                    time.sleep(1)
+                except Exception as e:
+                    print(f"  item ERR: {e}")
+        except Exception as e:
+            print(f"  feed ERR: {e}")
 
 # ── SOURCE 5: ECOLEX ─────────────────────────────────
 
@@ -264,7 +290,6 @@ def crawl_ecolex():
         resp = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(resp.text, "html.parser")
         items = soup.select("article.search-result")[:10]
-
         for item in items:
             try:
                 a_tag = item.select_one("h2 a")
@@ -277,7 +302,6 @@ def crawl_ecolex():
                 body = excerpt.get_text(strip=True) if excerpt else ""
                 if len(body) < 100:
                     body = fetch_text(full_url)
-
                 print(f"  {title[:55]}")
                 result = analyze(title, body)
                 row = {
@@ -348,7 +372,7 @@ def write_email_body():
     print("\n=== EMAIL PREVIEW ===")
     print(body)
 
-# ── MAIN ──────────────────────────────────────────────
+# ── MAIN ─────────────────────────────────────────────
 
 if __name__ == "__main__":
     print("Starting crawl...")
