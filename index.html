@@ -194,7 +194,15 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
     </div>
 
     <div id="panel-news" class="panel active">
-      <div class="search-row"><input type="text" id="search-news" placeholder="搜尋新聞..." oninput="filterNews()"></div>
+      <div class="search-row">
+        <input type="text" id="search-news" placeholder="搜尋新聞..." oninput="filterNews()" style="flex:1">
+        <select id="date-filter-news" onchange="filterNews()" style="font-family:var(--mono);font-size:12px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);outline:none">
+          <option value="0">全部時間</option>
+          <option value="7" selected>最近 7 天</option>
+          <option value="14">最近 14 天</option>
+          <option value="30">最近 30 天</option>
+        </select>
+      </div>
       <div class="filter-status">
         <button class="fsbtn active" onclick="setStatusFilter('news','all',this)">全部</button>
         <button class="fsbtn" onclick="setStatusFilter('news','unread',this)">未讀</button>
@@ -418,7 +426,7 @@ async function loadData(){
     const latest=news[0]||cases[0];
     if(latest){const d=new Date(latest.created_at);document.getElementById('last-update').textContent=d.toLocaleDateString('zh-TW',{month:'short',day:'numeric'})}
     document.getElementById('status-text').textContent='即時同步';
-    renderNews(allNews);renderCases(allCases);renderAnalytics();
+    filterNews();renderCases(allCases);renderAnalytics();
   }catch(e){
     document.getElementById('status-text').textContent='連線失敗';
   }
@@ -521,7 +529,18 @@ function renderCases(items){
 
 function filterNews(){
   const q=document.getElementById('search-news').value.toLowerCase();
-  renderNews(q?allNews.filter(n=>(n.headline+n.content_summary).toLowerCase().includes(q)):allNews);
+  const days=parseInt(document.getElementById('date-filter-news')?.value||'0');
+  let items=allNews;
+  if(days>0){
+    const cutoff=new Date();
+    cutoff.setDate(cutoff.getDate()-days);
+    items=items.filter(n=>{
+      if(!n.published_date) return true;
+      return new Date(n.published_date)>=cutoff;
+    });
+  }
+  if(q) items=items.filter(n=>(n.headline+n.content_summary).toLowerCase().includes(q));
+  renderNews(items);
 }
 function filterCases(){
   const q=document.getElementById('search-cases').value.toLowerCase();
