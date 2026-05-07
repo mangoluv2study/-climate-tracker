@@ -66,6 +66,12 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
 .tag-tort{background:#fff;color:#991B1B;border:1.5px solid #EF4444}
 .tag-rights{background:#fff;color:#92400E;border:1.5px solid #F59E0B}
 .tag-admin{background:#fff;color:#065F46;border:1.5px solid #10B981}
+/* 報導類型 — 實心底色白字 */
+.tag-report-verdict{background:#DC2626;color:#fff;border-color:#DC2626}
+.tag-report-law{background:#7C3AED;color:#fff;border-color:#7C3AED}
+.tag-report-corp{background:#1D4ED8;color:#fff;border-color:#1D4ED8}
+.tag-report-research{background:#0F766E;color:#fff;border-color:#0F766E}
+.tag-report-intl{background:#B45309;color:#fff;border-color:#B45309}
 /* D3 審理階段 — 深灰邊框白底 */
 .tag-stage{background:#fff;color:#374151;border:1.5px solid #6B7280}
 /* D4 環境議題 — 灰底極簡 */
@@ -245,6 +251,7 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem">
       <div class="back-btn" style="margin-bottom:0" onclick="showList()">← 返回列表</div>
       <button class="edit-btn" id="global-edit-btn" onclick="openEditModal(window.currentDetailType,window.currentDetailId)" style="display:none">✎ 編輯此筆資訊</button>
+      <button class="edit-btn" id="global-move-btn" onclick="moveCaseToNews(window.currentDetailId)" style="display:none;background:var(--blue-light);border-color:rgba(26,74,122,0.3);color:var(--blue)">↗ 移到新聞</button>
     </div>
     <div id="detail-content"></div>
   </div>
@@ -433,6 +440,15 @@ async function loadData(){
 }
 
 function defCls(v){return v&&v.includes('企業')||v&&v.includes('金融')?'tag-corp':v&&v.includes('政府')?'tag-gov':null;}
+function reportCls(v){
+  if(!v) return null;
+  if(v.includes('判決')) return 'tag-report-verdict';
+  if(v.includes('立法')) return 'tag-report-law';
+  if(v.includes('企業')) return 'tag-report-corp';
+  if(v.includes('學術')) return 'tag-report-research';
+  if(v.includes('國際')) return 'tag-report-intl';
+  return null;
+}
 function causeCls(v){
   if(!v||v==='不明') return null;
   if(v.includes('侵權')) return 'tag-tort';
@@ -442,25 +458,31 @@ function causeCls(v){
   return 'tag-admin';
 }
 function cardTags(item){
-  const d1cls=defCls(item.defendant_type);
-  const d2cls=causeCls(item.legal_cause);
-  const stage=item.court_stage;
+  const isNews=!!(item.headline);
   const topics=item.topic_tags||[];
-  // fallback to text-based if DB fields empty
   const text=(item.headline||item.title||'')+' '+(item.content_summary||item.summary||'');
-  const fd1=!d1cls?extractD1(text):null;
-  const fd2=!d2cls?extractD2(text):null;
-  const fd3=!stage||stage==='不明'?extractD3(text):null;
-  const fd4s=topics.length===0?extractD4s(text):[];
   let html='';
-  if(d1cls) html+=`<span class="tag ${d1cls}">${item.defendant_type}</span>`;
-  else if(fd1) html+=`<span class="tag ${fd1.cls}">${fd1.label}</span>`;
-  if(d2cls) html+=`<span class="tag ${d2cls}">${item.legal_cause}</span>`;
-  else if(fd2) html+=`<span class="tag ${fd2.cls}">${fd2.label}</span>`;
-  if(stage&&stage!=='不明') html+=`<span class="tag tag-stage">${stage}</span>`;
-  else if(fd3) html+=`<span class="tag tag-stage">${fd3.label}</span>`;
-  if(topics.length) topics.slice(0,2).forEach(t=>{ html+=`<span class="tag tag-topic"># ${t}</span>`; });
-  else fd4s.forEach(d=>{ html+=`<span class="tag tag-topic">${d.label}</span>`; });
+  if(isNews){
+    const rCls=reportCls(item.report_type);
+    if(rCls&&item.report_type) html+=`<span class="tag ${rCls}">${item.report_type}</span>`;
+    topics.slice(0,2).forEach(t=>{ html+=`<span class="tag tag-topic"># ${t}</span>`; });
+  } else {
+    const d1cls=defCls(item.defendant_type);
+    const d2cls=causeCls(item.legal_cause);
+    const stage=item.court_stage;
+    const fd1=!d1cls?extractD1(text):null;
+    const fd2=!d2cls?extractD2(text):null;
+    const fd3=!stage||stage==='不明'?extractD3(text):null;
+    const fd4s=topics.length===0?extractD4s(text):[];
+    if(d1cls) html+=`<span class="tag ${d1cls}">${item.defendant_type}</span>`;
+    else if(fd1) html+=`<span class="tag ${fd1.cls}">${fd1.label}</span>`;
+    if(d2cls) html+=`<span class="tag ${d2cls}">${item.legal_cause}</span>`;
+    else if(fd2) html+=`<span class="tag ${fd2.cls}">${fd2.label}</span>`;
+    if(stage&&stage!=='不明') html+=`<span class="tag tag-stage">${stage}</span>`;
+    else if(fd3) html+=`<span class="tag tag-stage">${fd3.label}</span>`;
+    if(topics.length) topics.slice(0,2).forEach(t=>{ html+=`<span class="tag tag-topic"># ${t}</span>`; });
+    else fd4s.forEach(d=>{ html+=`<span class="tag tag-topic">${d.label}</span>`; });
+  }
   return html;
 }
 
@@ -667,12 +689,19 @@ function showDetail(type,id){
       <span class="tag tag-green">${type==='news'?'新聞報導':'訴訟案件'}</span>
     </div>
     <div class="section">
-      <div class="section-label" style="display:flex;align-items:center">案件摘要</div>
+      <div class="section-label" style="display:flex;align-items:center">${type==='news'?'報導資訊':'案件摘要'}</div>
       <div class="summary-grid">
+        ${type==='news'?`
+        <div class="summary-item"><div class="summary-item-label">涉及國家</div><div class="summary-item-val">${country||'不明'}</div></div>
+        <div class="summary-item"><div class="summary-item-label">新聞來源</div><div class="summary-item-val">${esc(source)}</div></div>
+        <div class="summary-item"><div class="summary-item-label">報導類型</div><div class="summary-item-val">${item.report_type||'不明'}</div></div>
+        <div class="summary-item"><div class="summary-item-label">發布日期</div><div class="summary-item-val">${date}</div></div>
+        `:`
         <div class="summary-item"><div class="summary-item-label">涉及國家／地區</div><div class="summary-item-val">${country||'不明'}</div></div>
-        <div class="summary-item"><div class="summary-item-label">法律訴由</div><div class="summary-item-val">${item.legal_cause&&item.legal_cause!=='不明'?item.legal_cause:guessStage(summary)}</div></div>
-        <div class="summary-item"><div class="summary-item-label">審理階段</div><div class="summary-item-val">${stage&&stage!=='不明'?stage:guessStage(summary)}</div></div>
+        <div class="summary-item"><div class="summary-item-label">法律訴由</div><div class="summary-item-val">${item.legal_cause&&item.legal_cause!=='不明'?item.legal_cause:'不明'}</div></div>
+        <div class="summary-item"><div class="summary-item-label">審理階段</div><div class="summary-item-val">${stage&&stage!=='不明'?stage:'不明'}</div></div>
         <div class="summary-item"><div class="summary-item-label">判決結果</div><div class="summary-item-val">${guessOutcome(summary)}</div></div>
+        `}
       </div>
       <div class="summary-full">
         <div class="summary-full-label">Claude AI 摘要（繁體中文）</div>
@@ -705,6 +734,8 @@ function showDetail(type,id){
   document.getElementById('detail-view').style.display='block';
   const editBtn=document.getElementById('global-edit-btn');
   if(editBtn) editBtn.style.display='block';
+  const moveBtn=document.getElementById('global-move-btn');
+  if(moveBtn) moveBtn.style.display=type==='case'?'block':'none';
   window.scrollTo(0,0);
 }
 
@@ -802,6 +833,51 @@ async function saveEdit(){
   }
 }
 
+async function moveCaseToNews(id){
+  const item=allCases.find(c=>c.id===id);
+  if(!item) return;
+  if(!confirm('確定要將此案件移到新聞列表嗎？')) return;
+  try{
+    // Insert into news table
+    const newsRow={
+      headline: item.title,
+      original_headline: item.original_title||item.title,
+      source: '手動分類',
+      published_date: item.created_at?.slice(0,10)||new Date().toISOString().slice(0,10),
+      url: item.source_url||item.full_text_url||'',
+      content_summary: item.summary||'',
+      country: item.country||'',
+      report_type: '',
+      item_type: 'news',
+      defendant_type: item.defendant_type||'不明',
+      legal_cause: item.legal_cause||'不明',
+      court_stage: item.court_stage||'不明',
+      topic_tags: item.topic_tags||[],
+      tags: ['climate','litigation','news','moved']
+    };
+    await fetch(`${SB_URL}/rest/v1/news`,{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(newsRow)
+    });
+    // Delete from cases
+    await fetch(`${SB_URL}/rest/v1/cases?id=eq.${id}`,{
+      method:'DELETE',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    });
+    allCases=allCases.filter(c=>c.id!==id);
+    document.getElementById('count-cases').textContent=allCases.length;
+    // Reload news
+    const r=await fetch(`${SB_URL}/rest/v1/news?select=*&order=created_at.desc&limit=100`,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    allNews=await r.json();
+    document.getElementById('count-news').textContent=allNews.length;
+    showList();
+    alert('已移到新聞列表！');
+  } catch(e){
+    alert('移動失敗：'+e.message);
+  }
+}
+
 async function deleteItem(table, id, event){
   event.stopPropagation();
   if(!confirm('確定要刪除這筆資料嗎？此操作無法復原。')) return;
@@ -829,6 +905,8 @@ function showList(){
   document.getElementById('detail-view').style.display='none';
   const btn=document.getElementById('global-edit-btn');
   if(btn) btn.style.display='none';
+  const mBtn=document.getElementById('global-move-btn');
+  if(mBtn) mBtn.style.display='none';
   window.scrollTo(0,0);
 }
 
