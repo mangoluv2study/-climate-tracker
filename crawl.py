@@ -203,32 +203,78 @@ def crawl_google_news_zh():
             except Exception as e:
                 print(f"  ERR: {e}")
 
-# ── SOURCE 3: Sabin Center ───────────────────────────
+# ── SOURCE 3: Sabin Center Litigation Updates ───────────────────────
+
+def get_sabin_update_urls():
+    try:
+        resp = requests.get(
+            "https://climate.law.columbia.edu/climate-litigation-database-updates",
+            headers=HEADERS, timeout=15
+        )
+        soup = BeautifulSoup(resp.text, "html.parser")
+        links = []
+        for a in soup.select("a[href*='climate-litigation-updates']"):
+            href = a.get("href","")
+            if href.startswith("/"):
+                href = "https://climate.law.columbia.edu" + href
+            if href not in links and "climate-litigation-updates" in href:
+                links.append(href)
+        return links[:4]
+    except Exception as e:
+        print(f"  sabin index ERR: {e}")
+        return []
+
+def parse_sabin_update(url):
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=15)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        main = soup.select_one("article") or soup.select_one(".field--name-body") or soup.select_one("main")
+        if not main:
+            return []
+        cases = []
+        current_title = ""
+        current_text = []
+        for elem in main.find_all(["strong","p","h2","h3"]):
+            text = elem.get_text(strip=True)
+            if not text:
+                continue
+            if elem.name in ["strong","h3"] and len(text) > 20 and not text.startswith("HERE ARE"):
+                if current_title and current_text:
+                    cases.append((current_title, " ".join(current_text)))
+                current_title = text
+                current_text = []
+            elif elem.name == "p" and current_title:
+                current_text.append(text)
+        if current_title and current_text:
+            cases.append((current_title, " ".join(current_text)))
+        return cases[:8]
+    except Exception as e:
+        print(f"  parse ERR {url}: {e}")
+        return []
 
 def crawl_sabin():
-    print("\n=== Sabin Center ===")
-    for feed_url in CASES_FEEDS:
-        feed = feedparser.parse(feed_url)
-        for entry in feed.entries[:10]:
+    print("\n=== Sabin Center Litigation Updates ===")
+    urls = get_sabin_update_urls()
+    if not urls:
+        print("  No update URLs found")
+        return
+    print(f"  Found {len(urls)} update pages")
+    for url in urls:
+        print(f"  Parsing: {url[-50:]}")
+        cases = parse_sabin_update(url)
+        for title, body in cases:
             try:
-                print(f"  {entry.title[:55]}")
-                content = entry.get("summary","") or ""
-                if not content and entry.get("content"):
-                    content = entry["content"][0].get("value","")
-                body = BeautifulSoup(content, "html.parser").get_text()
-                if len(body) < 200:
-                    body = fetch_text(entry.link)
-                result = analyze(entry.title, body)
+                result = analyze(title, body)
                 item_type = result.get("item_type","case")
                 if item_type == "news":
                     row = {
-                        "headline": result.get("title_zh", entry.title),
-                        "original_headline": entry.title,
+                        "headline": result.get("title_zh", title),
+                        "original_headline": title,
                         "source": "Sabin Center",
                         "published_date": str(date.today()),
-                        "url": entry.link,
+                        "url": url,
                         "content_summary": result.get("summary",""),
-                        "report_type": result.get("report_type",""),
+                        "report_type": result.get("report_type","判決進展"),
                         "item_type": "news",
                         "defendant_type": result.get("defendant_type","不明"),
                         "legal_cause": result.get("legal_cause","不明"),
@@ -239,13 +285,13 @@ def crawl_sabin():
                     status = "NEW" if upsert_news(row) else "UPD"
                 else:
                     row = {
-                        "title": result.get("title_zh", entry.title),
-                        "original_title": entry.title,
+                        "title": result.get("title_zh", title),
+                        "original_title": title,
                         "court": result.get("court_stage",""),
                         "country": "",
                         "summary": result.get("summary",""),
-                        "source_url": entry.link,
-                        "full_text_url": entry.link,
+                        "source_url": url + "#" + title[:30].replace(" ","-"),
+                        "full_text_url": url,
                         "item_type": "case",
                         "defendant_type": result.get("defendant_type","不明"),
                         "legal_cause": result.get("legal_cause","不明"),
@@ -254,9 +300,11 @@ def crawl_sabin():
                         "tags": ["climate","litigation","case","sabin"]
                     }
                     status = "NEW" if upsert_case(row) else "UPD"
-                print(f"  {status} ({item_type}): {result.get('defendant_type','?')} | {result.get('legal_cause','?')}")
+                print(f"  {status} ({item_type}): {title[:50]}")
+                time.sleep(0.5)
             except Exception as e:
                 print(f"  ERR: {e}")
+        time.sleep(2)
 
 # ── SOURCE 4: Climate Home News + Climate Case Chart ─
 
