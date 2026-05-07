@@ -6,7 +6,7 @@ import requests
 import anthropic
 from bs4 import BeautifulSoup
 from supabase import create_client
-from datetime import date
+from datetime import date, datetime, timedelta
 
 sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 claude = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -127,6 +127,13 @@ def crawl_google_news_en():
         feed = feedparser.parse(feed_url)
         for entry in feed.entries[:10]:
             try:
+                # date filter - skip if older than 7 days
+                pub = entry.get("published_parsed") or entry.get("updated_parsed")
+                if pub:
+                    pub_date = datetime(*pub[:6])
+                    if datetime.now() - pub_date > timedelta(days=7):
+                        print(f"  SKIP (too old: {pub_date.date()})")
+                        continue
                 print(f"  {entry.title[:55]}")
                 body = fetch_text(entry.link)
                 result = analyze(entry.title, body)
@@ -159,6 +166,13 @@ def crawl_google_news_zh():
         feed = feedparser.parse(feed_url)
         for entry in feed.entries[:8]:
             try:
+                # date filter
+                pub = entry.get("published_parsed") or entry.get("updated_parsed")
+                if pub:
+                    pub_date = datetime(*pub[:6])
+                    if datetime.now() - pub_date > timedelta(days=7):
+                        print(f"  SKIP (too old: {pub_date.date()})")
+                        continue
                 print(f"  {entry.title[:55]}")
                 body = fetch_text(entry.link)
                 result = analyze(entry.title, body)
