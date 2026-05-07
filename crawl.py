@@ -1,12 +1,13 @@
 import os
 import json
 import time
+import hashlib
 import feedparser
 import requests
 import anthropic
 from bs4 import BeautifulSoup
 from supabase import create_client
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 claude = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -53,6 +54,7 @@ new_cases = []
 def fetch_text(url):
     try:
         resp = requests.get(url, headers=HEADERS, timeout=10, allow_redirects=True)
+        resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
         for tag in soup(["script","style","nav","header","footer","aside","figure","iframe"]):
             tag.decompose()
@@ -131,11 +133,13 @@ def crawl_google_news_en():
             try:
                 # date filter - skip if older than 7 days
                 pub = entry.get("published_parsed") or entry.get("updated_parsed")
+                pub_date_str = str(date.today())
                 if pub:
-                    pub_date = datetime(*pub[:6])
-                    if datetime.now() - pub_date > timedelta(days=7):
+                    pub_date = datetime(*pub[:6], tzinfo=timezone.utc)
+                    if datetime.now(timezone.utc) - pub_date > timedelta(days=7):
                         print(f"  SKIP (too old: {pub_date.date()})")
                         continue
+                    pub_date_str = str(pub_date.date())
                 print(f"  {entry.title[:55]}")
                 body = fetch_text(entry.link)
                 result = analyze(entry.title, body)
@@ -146,7 +150,7 @@ def crawl_google_news_en():
                     "headline": result.get("title_zh", entry.title),
                     "original_headline": entry.title,
                     "source": "Google News",
-                    "published_date": str(date.today()),
+                    "published_date": pub_date_str,
                     "url": entry.link,
                     "content_summary": result.get("summary",""),
                     "report_type": result.get("report_type",""),
@@ -238,7 +242,7 @@ def parse_sabin_update(url):
             text = elem.get_text(strip=True)
             if not text:
                 continue
-            if elem.name in ["strong","h3"] and len(text) > 20 and not text.startswith("HERE ARE"):
+            if elem.name in ["strong","h2","h3"] and len(text) > 20 and not text.startswith("HERE ARE"):
                 if current_title and current_text:
                     cases.append((current_title, " ".join(current_text)))
                 current_title = text
@@ -290,7 +294,7 @@ def crawl_sabin():
                         "court": result.get("court_stage",""),
                         "country": "",
                         "summary": result.get("summary",""),
-                        "source_url": url + "#" + title[:30].replace(" ","-"),
+                        "source_url": url + "#" + hashlib.md5(title.encode()).hexdigest()[:10],
                         "full_text_url": url,
                         "item_type": "case",
                         "defendant_type": result.get("defendant_type","不明"),
@@ -316,8 +320,11 @@ def crawl_alt_cases():
             if not feed.entries:
                 print(f"  無法讀取：{feed_url}")
                 continue
+            source_label = "Climate Case Chart" if "climatecasechart" in feed_url else "Climate Home News"
             for entry in feed.entries[:8]:
                 try:
+                    pub = entry.get("published_parsed") or entry.get("updated_parsed")
+                    pub_date_str = str(datetime(*pub[:6]).date()) if pub else str(date.today())
                     print(f"  {entry.title[:55]}")
                     content = entry.get("summary","") or ""
                     body = BeautifulSoup(content, "html.parser").get_text()
@@ -329,8 +336,8 @@ def crawl_alt_cases():
                         row = {
                             "headline": result.get("title_zh", entry.title),
                             "original_headline": entry.title,
-                            "source": "Climate Home News",
-                            "published_date": str(date.today()),
+                            "source": source_label,
+                            "published_date": pub_date_str,
                             "url": entry.link,
                             "content_summary": result.get("summary",""),
                             "report_type": result.get("report_type",""),
@@ -426,7 +433,8 @@ def crawl_taiwan_court():
                         pass
                     result = analyze(title, body)
                     row = {
-                        "title": title,
+                        "title": result.get("title_zh", title),
+                        "original_title": title,
                         "court": court,
                         "country": "台灣",
                         "summary": result.get("summary",""),
@@ -435,7 +443,7 @@ def crawl_taiwan_court():
                         "defendant_type": result.get("defendant_type","不明"),
                         "legal_cause": result.get("legal_cause","不明"),
                         "court_stage": result.get("court_stage","不明"),
-                        "topic_tags": result.get("topic_tags",[kw]),
+                        "topic_tags": result.get("topic_tags",[]),
                         "tags": ["climate","litigation","case","taiwan"]
                     }
                     status = "NEW" if upsert_case(row) else "UPD"
