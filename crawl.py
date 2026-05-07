@@ -65,7 +65,7 @@ def fetch_text(url):
 
 def analyze(title, body):
     content = body if len(body) > 200 else ""
-    prompt = f"""請分析以下氣候訴訟內容，回傳 JSON 格式，不要加任何說明或 markdown：
+    prompt = f"""請分析以下氣候相關內容，回傳 JSON 格式，不要加任何說明或 markdown：
 
 標題：{title}
 內文：{content[:2000] if content else '（無內文）'}
@@ -73,7 +73,9 @@ def analyze(title, body):
 請回傳以下 JSON（所有欄位用繁體中文）：
 {{
   "title_zh": "將標題翻譯成繁體中文，若已是繁體中文則直接複製，保留專有名詞",
-  "summary": "三句話摘要，直接描述案件內容",
+  "summary": "三句話摘要，直接描述內容",
+  "item_type": "判斷這是判決書/訴訟案件還是新聞報導，只能回答：case 或 news",
+  "report_type": "若為新聞，從以下選一個：判決進展、立法動態、企業行動、學術研究、國際協議；若為案件則留空",
   "defendant_type": "只能是以下其中一個：政府被告、企業被告、金融機構、不明",
   "legal_cause": "只能是以下其中一個：侵權行為、違憲／人權、行政不作為、刑事訴追、資訊揭露、不明",
   "court_stage": "只能是以下其中一個：國際法院、最高法院、上訴審、一審、不明",
@@ -147,6 +149,8 @@ def crawl_google_news_en():
                     "published_date": str(date.today()),
                     "url": entry.link,
                     "content_summary": result.get("summary",""),
+                    "report_type": result.get("report_type",""),
+                    "item_type": "news",
                     "defendant_type": result.get("defendant_type","不明"),
                     "legal_cause": result.get("legal_cause","不明"),
                     "court_stage": result.get("court_stage","不明"),
@@ -186,6 +190,8 @@ def crawl_google_news_zh():
                     "published_date": str(date.today()),
                     "url": entry.link,
                     "content_summary": result.get("summary",""),
+                    "report_type": result.get("report_type",""),
+                    "item_type": "news",
                     "defendant_type": result.get("defendant_type","不明"),
                     "legal_cause": result.get("legal_cause","不明"),
                     "court_stage": result.get("court_stage","不明"),
@@ -213,22 +219,42 @@ def crawl_sabin():
                 if len(body) < 200:
                     body = fetch_text(entry.link)
                 result = analyze(entry.title, body)
-                row = {
-                    "title": result.get("title_zh", entry.title),
-                    "original_title": entry.title,
-                    "court": result.get("court_stage",""),
-                    "country": "",
-                    "summary": result.get("summary",""),
-                    "source_url": entry.link,
-                    "full_text_url": entry.link,
-                    "defendant_type": result.get("defendant_type","不明"),
-                    "legal_cause": result.get("legal_cause","不明"),
-                    "court_stage": result.get("court_stage","不明"),
-                    "topic_tags": result.get("topic_tags",[]),
-                    "tags": ["climate","litigation","case","sabin"]
-                }
-                status = "NEW" if upsert_case(row) else "UPD"
-                print(f"  {status}: {row['defendant_type']} | {row['legal_cause']}")
+                item_type = result.get("item_type","case")
+                if item_type == "news":
+                    row = {
+                        "headline": result.get("title_zh", entry.title),
+                        "original_headline": entry.title,
+                        "source": "Sabin Center",
+                        "published_date": str(date.today()),
+                        "url": entry.link,
+                        "content_summary": result.get("summary",""),
+                        "report_type": result.get("report_type",""),
+                        "item_type": "news",
+                        "defendant_type": result.get("defendant_type","不明"),
+                        "legal_cause": result.get("legal_cause","不明"),
+                        "court_stage": result.get("court_stage","不明"),
+                        "topic_tags": result.get("topic_tags",[]),
+                        "tags": ["climate","litigation","news","sabin"]
+                    }
+                    status = "NEW" if upsert_news(row) else "UPD"
+                else:
+                    row = {
+                        "title": result.get("title_zh", entry.title),
+                        "original_title": entry.title,
+                        "court": result.get("court_stage",""),
+                        "country": "",
+                        "summary": result.get("summary",""),
+                        "source_url": entry.link,
+                        "full_text_url": entry.link,
+                        "item_type": "case",
+                        "defendant_type": result.get("defendant_type","不明"),
+                        "legal_cause": result.get("legal_cause","不明"),
+                        "court_stage": result.get("court_stage","不明"),
+                        "topic_tags": result.get("topic_tags",[]),
+                        "tags": ["climate","litigation","case","sabin"]
+                    }
+                    status = "NEW" if upsert_case(row) else "UPD"
+                print(f"  {status} ({item_type}): {result.get('defendant_type','?')} | {result.get('legal_cause','?')}")
             except Exception as e:
                 print(f"  ERR: {e}")
 
@@ -250,22 +276,42 @@ def crawl_alt_cases():
                     if len(body) < 200:
                         body = fetch_text(entry.link)
                     result = analyze(entry.title, body)
-                    row = {
-                        "title": result.get("title_zh", entry.title),
-                        "original_title": entry.title,
-                        "court": result.get("court_stage",""),
-                        "country": "",
-                        "summary": result.get("summary",""),
-                        "source_url": entry.link,
-                        "full_text_url": entry.link,
-                        "defendant_type": result.get("defendant_type","不明"),
-                        "legal_cause": result.get("legal_cause","不明"),
-                        "court_stage": result.get("court_stage","不明"),
-                        "topic_tags": result.get("topic_tags",[]),
-                        "tags": ["climate","litigation","case","international"]
-                    }
-                    status = "NEW" if upsert_case(row) else "UPD"
-                    print(f"  {status}: {row['defendant_type']} | {row['legal_cause']}")
+                    item_type = result.get("item_type","case")
+                    if item_type == "news":
+                        row = {
+                            "headline": result.get("title_zh", entry.title),
+                            "original_headline": entry.title,
+                            "source": "Climate Home News",
+                            "published_date": str(date.today()),
+                            "url": entry.link,
+                            "content_summary": result.get("summary",""),
+                            "report_type": result.get("report_type",""),
+                            "item_type": "news",
+                            "defendant_type": result.get("defendant_type","不明"),
+                            "legal_cause": result.get("legal_cause","不明"),
+                            "court_stage": result.get("court_stage","不明"),
+                            "topic_tags": result.get("topic_tags",[]),
+                            "tags": ["climate","litigation","news","international"]
+                        }
+                        status = "NEW" if upsert_news(row) else "UPD"
+                    else:
+                        row = {
+                            "title": result.get("title_zh", entry.title),
+                            "original_title": entry.title,
+                            "court": result.get("court_stage",""),
+                            "country": "",
+                            "summary": result.get("summary",""),
+                            "source_url": entry.link,
+                            "full_text_url": entry.link,
+                            "item_type": "case",
+                            "defendant_type": result.get("defendant_type","不明"),
+                            "legal_cause": result.get("legal_cause","不明"),
+                            "court_stage": result.get("court_stage","不明"),
+                            "topic_tags": result.get("topic_tags",[]),
+                            "tags": ["climate","litigation","case","international"]
+                        }
+                        status = "NEW" if upsert_case(row) else "UPD"
+                    print(f"  {status} ({item_type}): {result.get('defendant_type','?')} | {result.get('legal_cause','?')}")
                     time.sleep(1)
                 except Exception as e:
                     print(f"  item ERR: {e}")
