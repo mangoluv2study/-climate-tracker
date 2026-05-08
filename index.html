@@ -555,8 +555,6 @@ async function pushDetailToZotero(){
     title,
     url,
     abstractNote,
-    libraryCatalog: source,
-    publicationTitle: source,
     tags: tags.filter(Boolean).map(t=>({tag:t}))
   }];
   if(cfg.collectionKey){
@@ -575,7 +573,24 @@ async function pushDetailToZotero(){
     const failedKeys = result.failed && Object.keys(result.failed);
     if(failedKeys && failedKeys.length){
       console.error('Zotero failed entries:', result.failed);
-      throw new Error('Zotero API 仍有未成功的項目，請確認 Collection Key 與資料格式。');
+      const failedDetail = JSON.stringify(result.failed, null, 2);
+      if(cfg.collectionKey){
+        console.warn('Retrying without collection to see if item body is valid...');
+        delete body[0].collections;
+        const retryResp = await fetch(endpoint,{method:'POST',headers:{'Zotero-API-Key':cfg.apiKey,'Content-Type':'application/json'},body:JSON.stringify(body)});
+        console.log('Zotero retry response status:', retryResp.status);
+        if(retryResp.ok){
+          const retryResult = await retryResp.json();
+          console.log('Zotero retry response JSON:', retryResult);
+          const retrySuccessfulKeys = retryResult.successful && Object.keys(retryResult.successful);
+          if(retrySuccessfulKeys && retrySuccessfulKeys.length){
+            const itemKey = Object.values(retryResult.successful)[0];
+            alert('已成功儲存至 Zotero，但無法加入指定資料夾。請檢查 Collection Key。項目 Key: '+itemKey);
+            return;
+          }
+        }
+      }
+      throw new Error('Zotero API 仍有未成功的項目，失敗內容: '+failedDetail);
     }
     const itemKey = result.successful ? Object.values(result.successful)[0] : null;
     if(itemKey){
