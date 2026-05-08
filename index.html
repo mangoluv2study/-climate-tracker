@@ -210,11 +210,11 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
           </select>
         </div>
         <div class="config-row"><input id="input-zotero-library-id" type="text" placeholder="Zotero Library ID（數字 User 或 Group ID）"></div>
+        <div class="config-row"><input id="input-zotero-collection-key" type="text" placeholder="Zotero Collection Key（選填，非名稱）"></div>
         <div class="config-row">
-          <input id="input-zotero-collection-key" type="text" placeholder="Zotero Collection Key（選填，非名稱）">
           <button class="btn" onclick="saveZoteroConfig()">儲存 Zotero</button>
         </div>
-        <p class="config-note">Zotero 設定會儲存在 localStorage。若填入 Collection Key，轉存項目會放到該資料夾，例如「新聞整理」。</p>
+        <p class="config-note">Zotero 設定會儲存在 localStorage。若填入 Collection Key，轉存項目會放到該資料夾，例如「新聞整理」。Collection Key 可從 Zotero 右鍵資料夾 → Copy Zotero URI，URI 最後的字母數字串即為 Key。</p>
       </div>
 
       <div style="margin-bottom:1rem;display:flex;gap:8px;flex-wrap:wrap">
@@ -547,12 +547,18 @@ async function pushDetailToZotero(){
   if(cfg.collectionKey){
     body[0].collections=[cfg.collectionKey];
   }
+  console.log('Zotero config:', cfg);
+  console.log('Zotero item body:', body);
   try{
     const endpoint=`https://api.zotero.org/${cfg.libraryKind}/${encodeURIComponent(cfg.libraryId)}/items`;
+    console.log('Zotero endpoint:', endpoint);
     const resp=await fetch(endpoint,{method:'POST',headers:{'Zotero-API-Key':cfg.apiKey,'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!resp.ok){const text=await resp.text();throw new Error(`Zotero API 錯誤 ${resp.status} ${text}`)}
+    console.log('Zotero response status:', resp.status);
+    if(!resp.ok){const text=await resp.text();console.error('Zotero error response:', text);throw new Error(`Zotero API 錯誤 ${resp.status} ${text}`)}
+    const result = await resp.json();
+    console.log('Zotero success response:', result);
     alert('已成功儲存至 Zotero！');
-  }catch(e){alert('推送 Zotero 失敗：'+e.message)}
+  }catch(e){console.error('Zotero push error:', e);alert('推送 Zotero 失敗：'+e.message)}
 }
 
 async function fetchTable(t){
