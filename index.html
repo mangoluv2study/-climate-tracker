@@ -29,6 +29,9 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
 .logo-name{font-size:15px;font-weight:600}
 .logo-en{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:0.08em}
 .status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--green);background:var(--green-light);border:1px solid rgba(26,107,74,0.2);padding:4px 12px;border-radius:20px}
+.header-actions{display:flex;align-items:center;gap:8px}
+.btn-small{background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:6px 12px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.btn-small:hover{background:var(--bg2)}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
 
@@ -174,6 +177,7 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
     <div class="logo-icon">⚖</div>
     <div><div class="logo-name">氣候訴訟追蹤</div><div class="logo-en">CLIMATE LITIGATION TRACKER</div></div>
   </div>
+  <div class="header-actions"><button class="btn btn-small" onclick="toggleSettingsPanel()">⚙ 設定</button></div>
   <div class="status"><div class="dot"></div><span id="status-text">連線中...</span></div>
 </header>
 
@@ -185,31 +189,38 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
       <div class="metric"><div class="metric-label">最後更新</div><div class="metric-val" id="last-update" style="font-size:18px;padding-top:6px">—</div><div class="metric-sub">每日 08:00 自動爬取</div></div>
     </div>
 
-    <div id="config-section" class="config-box">
-      <div class="config-title">▸ Supabase 連線設定</div>
-      <div class="config-row"><input id="input-url" type="text" placeholder="Supabase Project URL（https://xxxx.supabase.co）"></div>
-      <div class="config-row">
-        <input id="input-key" type="text" placeholder="Supabase anon key">
-        <button class="btn" onclick="saveConfig()">連線 →</button>
+    <div id="settings-panel">
+      <div id="config-section" class="config-box">
+        <div class="config-title">▸ Supabase 連線設定</div>
+        <div class="config-row"><input id="input-url" type="text" placeholder="Supabase Project URL（https://xxxx.supabase.co）"></div>
+        <div class="config-row">
+          <input id="input-key" type="text" placeholder="Supabase anon key">
+          <button class="btn" onclick="saveConfig()">連線 →</button>
+        </div>
+        <p class="config-note">設定儲存於瀏覽器，下次開啟自動連線，若發生同步失敗將重新顯示此區。</p>
       </div>
-      <p class="config-note">設定儲存於瀏覽器，下次開啟自動連線，若發生同步失敗將重新顯示此區。</p>
-    </div>
 
-    <div id="zotero-config-section" class="config-box">
-      <div class="config-title">▸ Zotero 設定</div>
-      <div class="config-row"><input id="input-zotero-key" type="text" placeholder="Zotero API Key"></div>
-      <div class="config-row">
-        <select id="input-zotero-library-kind" style="flex:1;font-family:var(--mono);font-size:12px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg3);color:var(--text);outline:none">
-          <option value="users">User Library</option>
-          <option value="groups">Group Library</option>
-        </select>
+      <div id="zotero-config-section" class="config-box">
+        <div class="config-title">▸ Zotero 設定</div>
+        <div class="config-row"><input id="input-zotero-key" type="text" placeholder="Zotero API Key"></div>
+        <div class="config-row">
+          <select id="input-zotero-library-kind" style="flex:1;font-family:var(--mono);font-size:12px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg3);color:var(--text);outline:none">
+            <option value="users">User Library</option>
+            <option value="groups">Group Library</option>
+          </select>
+        </div>
+        <div class="config-row"><input id="input-zotero-library-id" type="text" placeholder="Zotero Library ID（數字 User 或 Group ID）"></div>
+        <div class="config-row">
+          <input id="input-zotero-collection-key" type="text" placeholder="Zotero Collection Key（選填，非名稱）">
+          <button class="btn" onclick="saveZoteroConfig()">儲存 Zotero</button>
+        </div>
+        <p class="config-note">Zotero 設定會儲存在 localStorage。若填入 Collection Key，轉存項目會放到該資料夾，例如「新聞整理」。</p>
       </div>
-      <div class="config-row"><input id="input-zotero-library-id" type="text" placeholder="Zotero Library ID（數字 User 或 Group ID）"></div>
-      <div class="config-row">
-        <input id="input-zotero-collection-key" type="text" placeholder="Zotero Collection Key（選填）">
-        <button class="btn" onclick="saveZoteroConfig()">儲存 Zotero</button>
+
+      <div style="margin-bottom:1rem;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-small" onclick="showZoteroConfig()">顯示/修改 Zotero 設定</button>
+        <button class="btn btn-small" onclick="toggleSettingsPanel()">收起設定區</button>
       </div>
-      <p class="config-note">Zotero 設定會儲存在 localStorage。若填入 Collection Key，轉存項目會放到該資料夾。</p>
     </div>
 
     <div class="tabs">
@@ -483,6 +494,19 @@ function loadZoteroConfig(){
 function hideZoteroConfigIfReady(){
   const cfg=getZoteroConfig();
   document.getElementById('zotero-config-section').style.display = cfg.apiKey && cfg.libraryId ? 'none' : 'block';
+}
+
+function toggleSettingsPanel(){
+  const panel=document.getElementById('settings-panel');
+  if(!panel) return;
+  panel.style.display = panel.style.display==='none' ? 'block' : 'none';
+}
+
+function showZoteroConfig(){
+  const panel=document.getElementById('settings-panel');
+  const section=document.getElementById('zotero-config-section');
+  if(panel) panel.style.display='block';
+  if(section) section.style.display='block';
 }
 
 async function validateZoteroConfig(cfg){
