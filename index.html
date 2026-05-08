@@ -473,6 +473,10 @@ async function saveZoteroConfig(){
   const cfg={apiKey,libraryKind,libraryId,collectionKey};
   const valid = await validateZoteroConfig(cfg);
   if(!valid){alert('Zotero 設定驗證失敗，請確認 API Key / Library ID / Library Type 是否正確');return}
+  if(collectionKey){
+    const validCollection = await validateZoteroCollection(cfg);
+    if(!validCollection){alert('Collection Key 無效，請確認你貼入的是 Zotero URI 最後的字母數字字串');return}
+  }
   localStorage.setItem('zotero_api_key',apiKey);
   localStorage.setItem('zotero_library_kind',libraryKind);
   localStorage.setItem('zotero_library_id',libraryId);
@@ -480,6 +484,17 @@ async function saveZoteroConfig(){
   else localStorage.removeItem('zotero_collection_key');
   hideZoteroConfigIfReady();
   alert('Zotero 設定已儲存，設定區已隱藏。');
+}
+
+async function validateZoteroCollection(cfg){
+  try{
+    const endpoint=`https://api.zotero.org/${cfg.libraryKind}/${encodeURIComponent(cfg.libraryId)}/collections/${encodeURIComponent(cfg.collectionKey)}`;
+    const resp=await fetch(endpoint,{headers:{'Zotero-API-Key':cfg.apiKey}});
+    return resp.ok;
+  }catch(e){
+    console.error('Zotero collection validation failed', e);
+    return false;
+  }
 }
 
 function loadZoteroConfig(){
@@ -556,8 +571,20 @@ async function pushDetailToZotero(){
     console.log('Zotero response status:', resp.status);
     if(!resp.ok){const text=await resp.text();console.error('Zotero error response:', text);throw new Error(`Zotero API 錯誤 ${resp.status} ${text}`)}
     const result = await resp.json();
-    console.log('Zotero success response:', result);
-    alert('已成功儲存至 Zotero！');
+    console.log('Zotero response JSON:', result);
+    const failedKeys = result.failed && Object.keys(result.failed);
+    if(failedKeys && failedKeys.length){
+      console.error('Zotero failed entries:', result.failed);
+      throw new Error('Zotero API 仍有未成功的項目，請確認 Collection Key 與資料格式。');
+    }
+    const itemKey = result.successful ? Object.values(result.successful)[0] : null;
+    if(itemKey){
+      const itemUrl = `https://www.zotero.org/${cfg.libraryKind}/${encodeURIComponent(cfg.libraryId)}/items/${itemKey}`;
+      alert('已成功儲存至 Zotero！項目 Key: '+itemKey);
+      console.log('Zotero item URL:', itemUrl);
+    } else {
+      alert('已成功儲存至 Zotero！');
+    }
   }catch(e){console.error('Zotero push error:', e);alert('推送 Zotero 失敗：'+e.message)}
 }
 
