@@ -198,11 +198,12 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
     <div id="zotero-config-section" class="config-box">
       <div class="config-title">▸ Zotero 設定</div>
       <div class="config-row"><input id="input-zotero-key" type="text" placeholder="Zotero API Key"></div>
+      <div class="config-row"><input id="input-zotero-library-id" type="text" placeholder="Zotero Library ID（User ID）"></div>
       <div class="config-row">
-        <input id="input-zotero-library-id" type="text" placeholder="Zotero Library ID（User ID）">
+        <input id="input-zotero-collection-key" type="text" placeholder="Zotero Collection Key（選填）">
         <button class="btn" onclick="saveZoteroConfig()">儲存 Zotero</button>
       </div>
-      <p class="config-note">Zotero API Key 與 Library ID 儲存在 localStorage，不會寫在程式碼中。</p>
+      <p class="config-note">Zotero 設定儲存在 localStorage。若填入 Collection Key，轉存項目會放到該 Zotero 資料夾。</p>
     </div>
 
     <div class="tabs">
@@ -440,23 +441,35 @@ function loadConfig(){
 function getZoteroConfig(){
   return {
     apiKey: localStorage.getItem('zotero_api_key')||'',
-    libraryId: localStorage.getItem('zotero_library_id')||''
+    libraryId: localStorage.getItem('zotero_library_id')||'',
+    collectionKey: localStorage.getItem('zotero_collection_key')||''
   };
 }
 
 function saveZoteroConfig(){
   const apiKey=document.getElementById('input-zotero-key').value.trim();
   const libraryId=document.getElementById('input-zotero-library-id').value.trim();
+  const collectionKey=document.getElementById('input-zotero-collection-key').value.trim();
   if(!apiKey||!libraryId){alert('請填入 Zotero API Key 與 Library ID');return}
   localStorage.setItem('zotero_api_key',apiKey);
   localStorage.setItem('zotero_library_id',libraryId);
-  alert('Zotero 設定已儲存。');
+  if(collectionKey) localStorage.setItem('zotero_collection_key',collectionKey);
+  else localStorage.removeItem('zotero_collection_key');
+  hideZoteroConfigIfReady();
+  alert('Zotero 設定已儲存，設定區已隱藏。');
 }
 
 function loadZoteroConfig(){
   const cfg=getZoteroConfig();
   if(cfg.apiKey) document.getElementById('input-zotero-key').value=cfg.apiKey;
   if(cfg.libraryId) document.getElementById('input-zotero-library-id').value=cfg.libraryId;
+  if(cfg.collectionKey) document.getElementById('input-zotero-collection-key').value=cfg.collectionKey;
+  hideZoteroConfigIfReady();
+}
+
+function hideZoteroConfigIfReady(){
+  const cfg=getZoteroConfig();
+  document.getElementById('zotero-config-section').style.display = cfg.apiKey && cfg.libraryId ? 'none' : 'block';
 }
 
 async function pushDetailToZotero(){
@@ -483,6 +496,9 @@ async function pushDetailToZotero(){
     publicationTitle: source,
     tags: tags.filter(Boolean).map(t=>({tag:t}))
   }];
+  if(cfg.collectionKey){
+    body[0].collections=[cfg.collectionKey];
+  }
   try{
     const endpoint=`https://api.zotero.org/users/${encodeURIComponent(cfg.libraryId)}/items`;
     const resp=await fetch(endpoint,{method:'POST',headers:{'Zotero-API-Key':cfg.apiKey,'Content-Type':'application/json'},body:JSON.stringify(body)});
