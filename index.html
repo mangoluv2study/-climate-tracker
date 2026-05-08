@@ -151,6 +151,8 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
 .related-tags{display:flex;gap:4px;flex-wrap:wrap}
 .edit-btn{font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:6px;cursor:pointer;background:var(--green-light);border:1px solid rgba(26,107,74,0.3);color:var(--green);transition:all 0.15s}
 .edit-btn:hover{border-color:var(--border2);color:var(--text)}
+.zotero-btn{font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:6px;cursor:pointer;background:var(--blue-light);border:1px solid rgba(26,74,122,0.3);color:var(--blue);transition:all 0.15s}
+.zotero-btn:hover{border-color:var(--border2);color:var(--text)}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:500;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.5rem;width:520px;max-width:90vw;max-height:85vh;overflow-y:auto}
@@ -190,7 +192,17 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
         <input id="input-key" type="text" placeholder="Supabase anon key">
         <button class="btn" onclick="saveConfig()">連線 →</button>
       </div>
-      <p class="config-note">設定儲存於瀏覽器，下次開啟自動連線。</p>
+      <p class="config-note">設定儲存於瀏覽器，下次開啟自動連線，若發生同步失敗將重新顯示此區。</p>
+    </div>
+
+    <div id="zotero-config-section" class="config-box">
+      <div class="config-title">▸ Zotero 設定</div>
+      <div class="config-row"><input id="input-zotero-key" type="text" placeholder="Zotero API Key"></div>
+      <div class="config-row">
+        <input id="input-zotero-library-id" type="text" placeholder="Zotero Library ID（User ID）">
+        <button class="btn" onclick="saveZoteroConfig()">儲存 Zotero</button>
+      </div>
+      <p class="config-note">Zotero API Key 與 Library ID 儲存在 localStorage，不會寫在程式碼中。</p>
     </div>
 
     <div class="tabs">
@@ -414,7 +426,69 @@ function saveConfig(){
 
 function loadConfig(){
   const u=localStorage.getItem('sb_url'),k=localStorage.getItem('sb_key');
-  if(u&&k){SB_URL=u;SB_KEY=k;document.getElementById('input-url').value=u;document.getElementById('input-key').value=k;document.getElementById('config-section').style.display='none';loadData()}
+  loadZoteroConfig();
+  if(u&&k){
+    SB_URL=u;
+    SB_KEY=k;
+    document.getElementById('input-url').value=u;
+    document.getElementById('input-key').value=k;
+    document.getElementById('config-section').style.display='none';
+    loadData();
+  }
+}
+
+function getZoteroConfig(){
+  return {
+    apiKey: localStorage.getItem('zotero_api_key')||'',
+    libraryId: localStorage.getItem('zotero_library_id')||''
+  };
+}
+
+function saveZoteroConfig(){
+  const apiKey=document.getElementById('input-zotero-key').value.trim();
+  const libraryId=document.getElementById('input-zotero-library-id').value.trim();
+  if(!apiKey||!libraryId){alert('請填入 Zotero API Key 與 Library ID');return}
+  localStorage.setItem('zotero_api_key',apiKey);
+  localStorage.setItem('zotero_library_id',libraryId);
+  alert('Zotero 設定已儲存。');
+}
+
+function loadZoteroConfig(){
+  const cfg=getZoteroConfig();
+  if(cfg.apiKey) document.getElementById('input-zotero-key').value=cfg.apiKey;
+  if(cfg.libraryId) document.getElementById('input-zotero-library-id').value=cfg.libraryId;
+}
+
+async function pushDetailToZotero(){
+  const cfg=getZoteroConfig();
+  if(!cfg.apiKey||!cfg.libraryId){alert('請先在儀表板設定 Zotero API Key 與 Library ID');return}
+  const item = window.currentDetailType==='news' ? allNews.find(n=>n.id===window.currentDetailId) : allCases.find(c=>c.id===window.currentDetailId);
+  if(!item){alert('找不到目前項目');return}
+  const title = item.headline||item.title||'未命名項目';
+  const url = item.url||item.source_url||'';
+  if(!url){alert('此項目沒有可用網址，無法推送到 Zotero。');return}
+  const abstractNote = item.content_summary||item.summary||'';
+  const source = item.source||item.report_type||'氣候訴訟追蹤';
+  const tags = [];
+  if(Array.isArray(item.topic_tags)) tags.push(...item.topic_tags);
+  if(item.legal_cause && item.legal_cause!=='不明') tags.push(item.legal_cause);
+  if(item.defendant_type && item.defendant_type!=='不明') tags.push(item.defendant_type);
+  if(source) tags.push(source);
+  const body=[{
+    itemType:'webpage',
+    title,
+    url,
+    abstractNote,
+    libraryCatalog: source,
+    publicationTitle: source,
+    tags: tags.filter(Boolean).map(t=>({tag:t}))
+  }];
+  try{
+    const endpoint=`https://api.zotero.org/users/${encodeURIComponent(cfg.libraryId)}/items`;
+    const resp=await fetch(endpoint,{method:'POST',headers:{'Zotero-API-Key':cfg.apiKey,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!resp.ok){const text=await resp.text();throw new Error(`Zotero API 錯誤 ${resp.status} ${text}`)}
+    alert('已成功儲存至 Zotero！');
+  }catch(e){alert('推送 Zotero 失敗：'+e.message)}
 }
 
 async function fetchTable(t){
@@ -436,6 +510,9 @@ async function loadData(){
     filterNews();renderCases(allCases);renderAnalytics();
   }catch(e){
     document.getElementById('status-text').textContent='連線失敗';
+    document.getElementById('config-section').style.display='block';
+    console.error('Supabase 同步失敗', e);
+    alert('Supabase 同步失敗，請檢查 Supabase URL / key 是否正確。');
   }
 }
 
@@ -712,7 +789,10 @@ function showDetail(type,id){
       <div class="section-label">原文來源</div>
       <div class="source-box">
         <div><div class="source-name">${esc(source.replace(' - Google News',''))}</div><div class="source-url">${esc(url)}</div></div>
-        <a class="source-link-btn" href="${esc(url)}" target="_blank">前往原文 →</a>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <a class="source-link-btn" href="${esc(url)}" target="_blank">前往原文 →</a>
+          <button class="zotero-btn" onclick="pushDetailToZotero()">存入 Zotero</button>
+        </div>
       </div>
     </div>`:''}
     ${related.length?`<div class="section">
