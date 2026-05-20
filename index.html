@@ -595,7 +595,41 @@ async function pushDetailToZotero(){
     const itemKey = result.successful ? Object.values(result.successful)[0] : null;
     if(itemKey){
       const itemUrl = `https://www.zotero.org/${cfg.libraryKind}/${encodeURIComponent(cfg.libraryId)}/items/${itemKey}`;
-      alert('已成功儲存至 Zotero！項目 Key: '+itemKey);
+      try {
+        const attachmentBody = [{
+          itemType: 'attachment',
+          title: '網頁快照',
+          parentItem: itemKey,
+          linkMode: 'imported_url',
+          url,
+          contentType: 'text/html',
+          collections: cfg.collectionKey ? [cfg.collectionKey] : undefined
+        }];
+        const attachResp = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Zotero-API-Key': cfg.apiKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(attachmentBody)
+        });
+        if(!attachResp.ok){
+          const attachText = await attachResp.text();
+          console.error('Zotero attachment response:', attachResp.status, attachText);
+          alert('已成功儲存至 Zotero！項目 Key: '+itemKey+'，但快照附件建立失敗。');
+          return;
+        }
+        const attachResult = await attachResp.json();
+        const attachKey = attachResult.successful ? Object.values(attachResult.successful)[0] : null;
+        if(attachKey){
+          alert('已成功儲存至 Zotero！項目 Key: '+itemKey+'，已附上網頁快照。');
+        } else {
+          alert('已成功儲存至 Zotero！項目 Key: '+itemKey+'，但快照附件未確認。');
+        }
+      } catch(attachError) {
+        console.error('Zotero attachment error:', attachError);
+        alert('已成功儲存至 Zotero！項目 Key: '+itemKey+'，但建立快照附件時失敗：'+attachError.message);
+      }
       console.log('Zotero item URL:', itemUrl);
     } else {
       alert('已成功儲存至 Zotero！');
