@@ -38,9 +38,11 @@ CASES_FEEDS = [
     "https://climate.law.columbia.edu/rss.xml",
 ]
 
-# 替代 ECOLEX - 可以從 GitHub Actions 存取的來源
+# 替代 ECOLEX - 可以從 GitHub Actions 存取的來源（皆為免費公開來源）
 ALT_CASE_FEEDS = [
-    "https://www.climatechangenews.com/feed/",
+    "https://www.climateliabilitynews.org/feed/",   # 專門氣候訴訟，免費
+    "https://insideclimatenews.org/feed/",           # Pulitzer 得獎媒體，免費
+    "https://earthjustice.org/news/feed",            # 氣候訴訟非營利組織
     "https://climatecasechart.com/feed/",
 ]
 
@@ -320,7 +322,16 @@ def crawl_alt_cases():
             if not feed.entries:
                 print(f"  無法讀取：{feed_url}")
                 continue
-            source_label = "Climate Case Chart" if "climatecasechart" in feed_url else "Climate Home News"
+            if "climatecasechart" in feed_url:
+                source_label = "Climate Case Chart"
+            elif "climateliabilitynews" in feed_url:
+                source_label = "Climate Liability News"
+            elif "insideclimatenews" in feed_url:
+                source_label = "Inside Climate News"
+            elif "earthjustice" in feed_url:
+                source_label = "Earthjustice"
+            else:
+                source_label = "Climate News"
             for entry in feed.entries[:8]:
                 try:
                     pub = entry.get("published_parsed") or entry.get("updated_parsed")
