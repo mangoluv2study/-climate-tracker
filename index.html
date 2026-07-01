@@ -24,6 +24,8 @@
 body{background:var(--bg);color:var(--text);font-family:var(--serif);min-height:100vh}
 
 header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 2rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200}
+#header-back{display:none;align-items:center;gap:6px;font-family:var(--mono);font-size:13px;color:var(--green);cursor:pointer;padding:6px 12px;border-radius:6px;border:1px solid rgba(26,107,74,0.3);background:var(--green-light);white-space:nowrap;transition:background 0.2s}
+#header-back:hover{background:rgba(26,107,74,0.15)}
 .logo{display:flex;align-items:center;gap:12px;cursor:pointer}
 .logo-icon{width:36px;height:36px;background:var(--green);border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:18px}
 .logo-name{font-size:15px;font-weight:600}
@@ -173,6 +175,7 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 
 </head>
 <body>
 <header>
+  <div id="header-back" onclick="showList()">← 回首頁</div>
   <div class="logo" onclick="showList()">
     <div class="logo-icon">⚖</div>
     <div><div class="logo-name">氣候訴訟追蹤</div><div class="logo-en">CLIMATE LITIGATION TRACKER</div></div>
@@ -638,7 +641,7 @@ async function pushDetailToZotero(){
 }
 
 async function fetchTable(t){
-  const r=await fetch(`${SB_URL}/rest/v1/${t}?select=*&order=created_at.desc&limit=100`,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+  const r=await fetch(`${SB_URL}/rest/v1/${t}?select=*&order=created_at.desc&limit=1000`,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
 }
@@ -958,6 +961,7 @@ function showDetail(type,id){
   `;
   document.getElementById('list-view').style.display='none';
   document.getElementById('detail-view').style.display='block';
+  document.getElementById('header-back').style.display='flex';
   const editBtn=document.getElementById('global-edit-btn');
   if(editBtn) editBtn.style.display='block';
   const moveBtn=document.getElementById('global-move-btn');
@@ -1129,6 +1133,7 @@ async function deleteItem(table, id, event){
 function showList(){
   document.getElementById('list-view').style.display='block';
   document.getElementById('detail-view').style.display='none';
+  document.getElementById('header-back').style.display='none';
   const btn=document.getElementById('global-edit-btn');
   if(btn) btn.style.display='none';
   const mBtn=document.getElementById('global-move-btn');
